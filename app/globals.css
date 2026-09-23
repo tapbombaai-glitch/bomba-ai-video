@@ -9,50 +9,271 @@ body {
 }
 
 body {
-  background: #080808;
+  background: #050505;
   color: #f5f5f5;
   font-family: Arial, Helvetica, sans-serif;
 }
 
-main {
-  max-width: 1100px;
-  margin: auto;
-  padding: 30px 18px;
-}
-
-h1 {
-  color: #ffd43b;
-  font-size: 42px;
-  margin-bottom: 12px;
-}
-
-p {
-  color: #aaa;
-  font-size: 18px;
-  line-height: 1.6;
+button,
+textarea {
+  font: inherit;
 }
 
 button {
-  background: #ffd43b;
-  color: #111;
-  border: 0;
-  border-radius: 10px;
-  padding: 13px 18px;
-  margin: 10px 8px 0 0;
-  font-weight: bold;
   cursor: pointer;
 }
 
-button:hover {
-  opacity: 0.85;
+.studio {
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-@media (max-width: 600px) {
-  main {
-    padding: 24px 14px;
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 30px;
+}
+
+.brand {
+  color: #ffd43b;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.subtitle {
+  color: #777;
+  font-size: 11px;
+  letter-spacing: 3px;
+  margin-top: 3px;
+}
+
+.profileButton {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #333;
+  border-radius: 50%;
+  background: #111;
+  color: #ffd43b;
+  font-weight: bold;
+}
+
+.hero {
+  padding: 35px 0 30px;
+  max-width: 850px;
+}
+
+.badge {
+  display: inline-block;
+  border: 1px solid #4a3d0b;
+  background: #171300;
+  color: #ffd43b;
+  border-radius: 30px;
+  padding: 8px 13px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.hero h1 {
+  font-size: clamp(38px, 7vw, 70px);
+  line-height: 1.02;
+  margin: 20px 0;
+  letter-spacing: -2px;
+}
+
+.hero h1 span {
+  color: #ffd43b;
+}
+
+.hero p {
+  color: #999;
+  font-size: 18px;
+  line-height: 1.6;
+  max-width: 700px;
+}
+
+.studioCard {
+  background: #0d0d0d;
+  border: 1px solid #222;
+  border-radius: 20px;
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.studioCard h2,
+.workflow h2,
+.future h2 {
+  margin-top: 0;
+}
+
+.modeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 20px 0;
+}
+
+.mode {
+  border: 1px solid #292929;
+  background: #151515;
+  color: #aaa;
+  border-radius: 10px;
+  padding: 11px 15px;
+}
+
+.mode:hover,
+.mode.active {
+  background: #ffd43b;
+  border-color: #ffd43b;
+  color: #111;
+  font-weight: bold;
+}
+
+.promptBox {
+  background: #080808;
+  border: 1px solid #252525;
+  border-radius: 15px;
+  padding: 18px;
+}
+
+.promptBox label {
+  display: block;
+  color: #ddd;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.promptBox textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+  padding: 15px;
+  line-height: 1.6;
+}
+
+.promptBox textarea::placeholder {
+  color: #666;
+}
+
+.promptFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.promptFooter span {
+  color: #666;
+  font-size: 13px;
+}
+
+.generateButton {
+  border: 0;
+  border-radius: 10px;
+  background: #ffd43b;
+  color: #111;
+  padding: 13px 20px;
+  font-weight: 900;
+}
+
+.generateButton:hover {
+  opacity: 0.88;
+}
+
+.workflow,
+.future {
+  padding: 45px 0 10px;
+}
+
+.workflowGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.workflowGrid > div {
+  background: #0d0d0d;
+  border: 1px solid #222;
+  border-radius: 15px;
+  padding: 20px;
+}
+
+.workflowGrid strong {
+  color: #ffd43b;
+  font-size: 13px;
+}
+
+.workflowGrid h3 {
+  margin: 18px 0 8px;
+}
+
+.workflowGrid p {
+  color: #777;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.featureList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.featureList span {
+  background: #101010;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #bbb;
+}
+
+@media (max-width: 750px) {
+  .studio {
+    padding: 15px;
   }
 
-  h1 {
-    font-size: 32px;
+  .hero h1 {
+    font-size: 42px;
+  }
+
+  .workflowGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .promptFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .generateButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: 36px;
+  }
+
+  .hero p {
+    font-size: 16px;
+  }
+
+  .studioCard {
+    padding: 16px;
+  }
+
+  .workflowGrid {
+    grid-template-columns: 1fr;
   }
 }
