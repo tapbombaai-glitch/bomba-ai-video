@@ -11,10 +11,7 @@ export async function POST(request) {
 
     if (!token) {
       return NextResponse.json(
-        {
-          error:
-            "REPLICATE_API_TOKEN is missing. Add it to the Vercel environment variables.",
-        },
+        { error: "REPLICATE_API_TOKEN is missing." },
         { status: 500 }
       );
     }
@@ -32,21 +29,6 @@ export async function POST(request) {
       );
     }
 
-    /*
-      BOMBA keeps the video engine universal.
-
-      The user can describe:
-      - a movie
-      - a relationship story
-      - an advert
-      - a market scene
-      - a school drama
-      - an action scene
-      - a presenter
-      - etc.
-
-      We don't hard-code one particular story.
-    */
     const finalPrompt = `
 Create a realistic live-action video.
 
@@ -67,7 +49,7 @@ No cartoon.
 No anime.
 No illustration.
 No 3D cartoon style.
-No fantasy-looking characters unless the user's story specifically requests them.
+No fantasy-looking characters unless specifically requested.
 
 Make the scene visually match the story exactly.
 `.trim();
@@ -77,10 +59,6 @@ Make the scene visually match the story exactly.
       prompt_optimizer: true,
     };
 
-    /*
-      If the user uploaded a character photo, use it
-      as the first frame/reference for the video.
-    */
     if (characterImage) {
       input.first_frame_image = characterImage;
     }
@@ -92,9 +70,7 @@ Make the scene visually match the story exactly.
         "Content-Type": "application/json",
         Prefer: "wait",
       },
-      body: JSON.stringify({
-        input,
-      }),
+      body: JSON.stringify({ input }),
     });
 
     const replicateData = await replicateResponse.json();
@@ -106,17 +82,10 @@ Make the scene visually match the story exactly.
             replicateData?.detail ||
             replicateData?.error ||
             "Replicate could not start the video generation.",
-          details: replicateData,
         },
         { status: replicateResponse.status }
       );
     }
-
-    /*
-      With Prefer: wait, Replicate may return the completed
-      prediction. If generation takes longer, it can instead
-      return a prediction that is still processing.
-    */
 
     if (
       replicateData?.status === "starting" ||
@@ -126,8 +95,7 @@ Make the scene visually match the story exactly.
         success: true,
         jobId: replicateData.id,
         status: replicateData.status,
-        message:
-          "Your video is still being generated. The next step is to poll this job until it is ready.",
+        message: "Video is still being generated.",
       });
     }
 
@@ -136,27 +104,18 @@ Make the scene visually match the story exactly.
         {
           error:
             replicateData?.error ||
-            "The video generation failed on the AI engine.",
+            "The video generation failed.",
         },
         { status: 500 }
       );
     }
 
-    /*
-      Video-01 normally returns a video URI.
-    */
-    let videoUrl = null;
-
-    if (typeof replicateData?.output === "string") {
-      videoUrl = replicateData.output;
-    } else if (replicateData?.output?.url) {
-      videoUrl = replicateData.output.url;
-    }
+    const videoUrl = getVideoUrl(replicateData);
 
     if (!videoUrl) {
       return NextResponse.json(
         {
-          error: "The AI engine finished, but no video URL was returned.",
+          error: "Video finished but no video URL was returned.",
           predictionId: replicateData?.id || null,
           status: replicateData?.status || null,
         },
@@ -182,4 +141,116 @@ Make the scene visually match the story exactly.
       { status: 500 }
     );
   }
+}
+
+export async function GET(request) {
+  try {
+    const token = process.env.REPLICATE_API_TOKEN;
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "REPLICATE_API_TOKEN is missing." },
+        { status: 500 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const predictionId = searchParams.get("predictionId");
+
+    if (!predictionId) {
+      return NextResponse.json(
+        { error: "predictionId is required." },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetch(
+      `https://api.replicate.com/v1/predictions/${predictionId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          error:
+            data?.detail ||
+            data?.error ||
+            "Could not check video status.",
+        },
+        { status: response.status }
+      );
+    }
+
+    if (data.status === "failed") {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error: data.error || "Video generation failed.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (data.status === "canceled") {
+      return NextResponse.json(
+        {
+          status: "canceled",
+          error: "Video generation was canceled.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const videoUrl = getVideoUrl(data);
+
+    return NextResponse.json({
+      success: true,
+      status: data.status,
+      videoUrl,
+      predictionId: data.id,
+    });
+  } catch (error) {
+    console.error("BOMBA VIDEO STATUS ERROR:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          error?.message ||
+          "Unexpected error while checking video status.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+function getVideoUrl(data) {
+  if (typeof data?.output === "string") {
+    return data.output;
+  }
+
+  if (data?.output?.url) {
+    return data.output.url;
+  }
+
+  if (Array.isArray(data?.output) && data.output.length > 0) {
+    const first = data.output[0];
+
+    if (typeof first === "string") {
+      return first;
+    }
+
+    if (first?.url) {
+      return first.url;
+    }
+  }
+
+  return null;
 }
