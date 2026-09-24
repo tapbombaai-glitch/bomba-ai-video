@@ -8,6 +8,7 @@ export default function Home() {
   const [characterImage, setCharacterImage] = useState(null);
   const [bombaKey, setBombaKey] = useState("");
   const [loadingKey, setLoadingKey] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -186,7 +187,7 @@ User idea: ${prompt}
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(bombaKey ? { "x-bomba-key": bombaKey } : {}),
+         ...(bombaKey? { "x-bomba-key": bombaKey } : {}),
         },
         body: JSON.stringify({
           mode,
@@ -251,7 +252,7 @@ User idea: ${prompt}
           {modes.map((item) => (
             <button
               key={item}
-              className={mode === item ? "mode active" : "mode"}
+              className={mode === item? "mode active" : "mode"}
               onClick={() => setMode(item)}
             >
               {item}
@@ -269,7 +270,7 @@ User idea: ${prompt}
             </div>
           </div>
 
-          {!characterImage ? (
+          {!characterImage? (
             <label className="uploadBox">
               <input
                 ref={fileInputRef}
@@ -338,7 +339,7 @@ User idea: ${prompt}
               onClick={handleGenerateVideo}
               disabled={loading}
             >
-              {loading ? "Generating..." : "🎬 Generate Video"}
+              {loading? "Generating..." : "🎬 Generate Video"}
             </button>
           </div>
         </div>
@@ -434,7 +435,7 @@ User idea: ${prompt}
             }}
           >
             {loadingKey
-              ? "Generating..."
+             ? "Generating..."
               : "Generate My Bomba Key"}
           </button>
 
@@ -446,15 +447,34 @@ User idea: ${prompt}
                 background: "black",
                 borderRadius: "8px",
                 wordBreak: "break-all",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "10px",
               }}
             >
-              <code style={{ color: "#facc15" }}>
+              <code style={{ color: "#facc15", flex: 1 }}>
                 {bombaKey}
               </code>
-
-              <p style={{ fontSize: "12px", marginTop: "5px" }}>
-                Copy am! Na your own be this!
-              </p>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(bombaKey);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                style={{
+                  background: "#facc15",
+                  color: "black",
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  fontWeight: "bold",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {copied? "Copied! ✅" : "Copy"}
+              </button>
             </div>
           )}
         </div>
