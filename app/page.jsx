@@ -103,6 +103,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error(err);
+
       setError(
         err.message || "Failed to generate BOMBA API key."
       );
@@ -115,7 +116,39 @@ export default function Home() {
     if (!bombaKey) return;
 
     try {
-      await navigator.clipboard.writeText(bombaKey);
+      if (
+        navigator.clipboard &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(bombaKey);
+      } else {
+        const textArea = document.createElement("textarea");
+
+        textArea.value = bombaKey;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        textArea.style.opacity = "0";
+
+        document.body.appendChild(textArea);
+
+        textArea.focus();
+        textArea.select();
+        textArea.setSelectionRange(
+          0,
+          textArea.value.length
+        );
+
+        const successful =
+          document.execCommand("copy");
+
+        document.body.removeChild(textArea);
+
+        if (!successful) {
+          throw new Error("Copy command failed.");
+        }
+      }
+
       setCopied(true);
 
       setTimeout(() => {
@@ -123,7 +156,10 @@ export default function Home() {
       }, 2000);
     } catch (err) {
       console.error(err);
-      alert("Unable to copy the API key. Please copy it manually.");
+
+      alert(
+        "Unable to copy automatically. Please press and hold the key and copy it manually."
+      );
     }
   };
 
@@ -161,7 +197,10 @@ export default function Home() {
           );
         }
 
-        if (data.status === "succeeded" && data.videoUrl) {
+        if (
+          data.status === "succeeded" &&
+          data.videoUrl
+        ) {
           stopPolling();
 
           setVideoUrl(data.videoUrl);
@@ -511,7 +550,6 @@ ${prompt}
           </div>
         )}
 
-        {/* BOMBA API KEY */}
         <div
           style={{
             marginTop: "30px",
@@ -659,21 +697,3 @@ ${prompt}
     </main>
   );
 }
-
-Commit it
-
-In GitHub:
-
-File name/path
-
-app/page.jsx
-
-Replace everything with the code above.
-
-Commit message
-
-Fix BOMBA API key generation and copy
-
-Leave the extended description empty, then Commit changes.
-
-After Vercel finishes deploying, test Generate My Bomba Key first. The key should appear with a visible Copy button. Don't change the video API route for this test.
