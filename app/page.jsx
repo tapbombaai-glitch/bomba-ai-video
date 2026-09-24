@@ -5,6 +5,7 @@ import { useState } from "react";
 export default function Home() {
   const [mode, setMode] = useState("Movie");
   const [prompt, setPrompt] = useState("");
+  const [characterImage, setCharacterImage] = useState(null);
   const [bombaKey, setBombaKey] = useState("");
   const [loadingKey, setLoadingKey] = useState(false);
 
@@ -18,11 +19,44 @@ export default function Home() {
     "Story",
   ];
 
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image must be smaller than 10MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      setCharacterImage(reader.result);
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const removeCharacterImage = () => {
+    setCharacterImage(null);
+  };
+
   const handleGenerateBombaKey = async () => {
     setLoadingKey(true);
+
     try {
-      const res = await fetch('/api/keys/generate', { method: 'POST' });
+      const res = await fetch("/api/keys/generate", {
+        method: "POST",
+      });
+
       const data = await res.json();
+
       if (data.apiKey) {
         setBombaKey(data.apiKey);
       } else {
@@ -31,6 +65,7 @@ export default function Home() {
     } catch (err) {
       alert("Failed to generate key");
     }
+
     setLoadingKey(false);
   };
 
@@ -74,13 +109,75 @@ export default function Home() {
           ))}
         </div>
 
+        {/* CHARACTER PHOTO */}
+        <div className="characterUpload">
+          <div className="characterHeader">
+            <div>
+              <h3>👤 Your Character</h3>
+              <p>
+                Upload your photo to use yourself as the main character.
+              </p>
+            </div>
+          </div>
+
+          {!characterImage ? (
+            <label className="uploadBox">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleImageUpload}
+                hidden
+              />
+
+              <div className="uploadIcon">📸</div>
+              <strong>+ Add Your Photo</strong>
+              <span>PNG, JPG or WEBP · Maximum 10MB</span>
+            </label>
+          ) : (
+            <div className="characterPreview">
+              <img
+                src={characterImage}
+                alt="Your BOMBA character"
+              />
+
+              <div className="characterPreviewInfo">
+                <strong>✅ Character Photo Added</strong>
+                <span>
+                  This photo will be used as your character reference.
+                </span>
+
+                <div className="characterActions">
+                  <label className="changePhoto">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleImageUpload}
+                      hidden
+                    />
+                    Change Photo
+                  </label>
+
+                  <button
+                    type="button"
+                    className="removePhoto"
+                    onClick={removeCharacterImage}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* VIDEO PROMPT */}
         <div className="promptBox">
           <label>Describe your video</label>
 
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Example: A young Nigerian man enters a busy market, meets his friend, they talk and laugh while people move around them..."
+            placeholder="Example: I walk into a busy Nigerian market, meet my friend, shake hands with him and we laugh while people move naturally around us..."
           />
 
           <div className="promptFooter">
@@ -92,27 +189,56 @@ export default function Home() {
           </div>
         </div>
 
-        {/* --- NEW BOMBA KEY SECTION --- */}
-        <div style={{ marginTop: '30px', padding: '20px', background: '#111', borderRadius: '12px', border: '1px dashed #facc15' }}>
+        {/* BOMBA KEY */}
+        <div
+          style={{
+            marginTop: "30px",
+            padding: "20px",
+            background: "#111",
+            borderRadius: "12px",
+            border: "1px dashed #facc15",
+          }}
+        >
           <h3>🔑 Get Your Bomba API Key (FREE)</h3>
-          <p style={{ fontSize: '14px', opacity: 0.7 }}>Use this key to access Bomba API without paying us</p>
-          
-          <button 
+
+          <p style={{ fontSize: "14px", opacity: 0.7 }}>
+            Use this key to access Bomba API without paying us
+          </p>
+
+          <button
             onClick={handleGenerateBombaKey}
             disabled={loadingKey}
-            style={{ marginTop: '10px', background: '#facc15', color: 'black', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{
+              marginTop: "10px",
+              background: "#facc15",
+              color: "black",
+              padding: "10px 20px",
+              borderRadius: "8px",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
           >
             {loadingKey ? "Generating..." : "Generate My Bomba Key"}
           </button>
 
           {bombaKey && (
-            <div style={{ marginTop: '15px', padding: '10px', background: 'black', borderRadius: '8px', wordBreak: 'break-all' }}>
-              <code style={{ color: '#facc15' }}>{bombaKey}</code>
-              <p style={{ fontSize: '12px', marginTop: '5px' }}>Copy am! Na your own be this!</p>
+            <div
+              style={{
+                marginTop: "15px",
+                padding: "10px",
+                background: "black",
+                borderRadius: "8px",
+                wordBreak: "break-all",
+              }}
+            >
+              <code style={{ color: "#facc15" }}>{bombaKey}</code>
+
+              <p style={{ fontSize: "12px", marginTop: "5px" }}>
+                Copy am! Na your own be this!
+              </p>
             </div>
           )}
         </div>
-
       </section>
 
       <section className="workflow">
