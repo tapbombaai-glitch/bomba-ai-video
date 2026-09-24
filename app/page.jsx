@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function Home() {
   const [mode, setMode] = useState("Movie");
@@ -9,11 +9,12 @@ export default function Home() {
   const [bombaKey, setBombaKey] = useState("");
   const [loadingKey, setLoadingKey] = useState(false);
 
-  // ========== NEW STATES (added) ==========
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+
+  const pollingRef = useRef(null);
 
   const modes = [
     "Movie",
@@ -24,6 +25,14 @@ export default function Home() {
     "Presenter",
     "Story",
   ];
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
 
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0];
@@ -75,12 +84,90 @@ export default function Home() {
     setLoadingKey(false);
   };
 
-  // ========== NEW FUNCTION: GENERATE VIDEO ==========
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const pollVideo = (predictionId) => {
+    let attempts = 0;
+    const maxAttempts = 90;
+
+    pollingRef.current = setInterval(async () => {
+      attempts++;
+
+      try {
+        const res = await fetch(
+          `/api/video/generate?predictionId=${encodeURIComponent(
+            predictionId
+          )}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Unable to check video status.");
+        }
+
+        if (data.status === "succeeded" && data.videoUrl) {
+          stopPolling();
+
+          setVideoUrl(data.videoUrl);
+          setStatus("Video ready! 🎬");
+          setLoading(false);
+          return;
+        }
+
+        if (data.status === "failed" || data.status === "canceled") {
+          stopPolling();
+
+          setError(data.error || "Video generation failed.");
+          setStatus("");
+          setLoading(false);
+          return;
+        }
+
+        const seconds = attempts * 5;
+
+        setStatus(
+          `Video is still being generated... ${seconds}s`
+        );
+
+        if (attempts >= maxAttempts) {
+          stopPolling();
+
+          setError(
+            "Video is taking longer than expected. Please try again later."
+          );
+          setStatus("");
+          setLoading(false);
+        }
+      } catch (err) {
+        stopPolling();
+
+        console.error(err);
+
+        setError(
+          err.message || "Unable to check video generation status."
+        );
+        setStatus("");
+        setLoading(false);
+      }
+    }, 5000);
+  };
+
   const handleGenerateVideo = async () => {
     if (!prompt.trim()) {
       setError("Please describe your video first.");
       return;
     }
+
+    stopPolling();
 
     setLoading(true);
     setError("");
@@ -88,7 +175,6 @@ export default function Home() {
     setStatus("Preparing your realistic video...");
 
     try {
-      // Strong realistic style instruction (added so it doesn't become cartoon)
       const realisticPrompt = `
 Photorealistic live-action video, cinematic quality, natural lighting, real human skin texture, realistic body movement, natural environment, no cartoon, no anime, no illustration style.
 Mode: ${mode}
@@ -104,7 +190,7 @@ User idea: ${prompt}
         body: JSON.stringify({
           mode,
           prompt: realisticPrompt,
-          characterImage, // base64 image (if uploaded)
+          characterImage,
         }),
       });
 
@@ -116,19 +202,26 @@ User idea: ${prompt}
 
       if (data.videoUrl) {
         setVideoUrl(data.videoUrl);
-        setStatus("Video ready!");
+        setStatus("Video ready! 🎬");
+        setLoading(false);
       } else if (data.jobId) {
-        // If your backend returns a jobId (asynchronous generation)
-        setStatus("Video is being generated... this may take 1–3 minutes");
-        // You can add polling here later
+        setStatus(
+          "Video is being generated... please wait 🎬"
+        );
+
+        pollVideo(data.jobId);
       } else {
-        throw new Error("No video URL returned");
+        throw new Error("No video job or video URL returned.");
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || "Something went wrong while generating the video");
+
+      setError(
+        err.message ||
+          "Something went wrong while generating the video."
+      );
+
       setStatus("");
-    } finally {
       setLoading(false);
     }
   };
@@ -173,7 +266,6 @@ User idea: ${prompt}
           ))}
         </div>
 
-        {/* CHARACTER PHOTO */}
         <div className="characterUpload">
           <div className="characterHeader">
             <div>
@@ -206,6 +298,7 @@ User idea: ${prompt}
 
               <div className="characterPreviewInfo">
                 <strong>✅ Character Photo Added</strong>
+
                 <span>
                   This photo will be used as your character reference.
                 </span>
@@ -234,7 +327,6 @@ User idea: ${prompt}
           )}
         </div>
 
-        {/* VIDEO PROMPT */}
         <div className="promptBox">
           <label>Describe your video</label>
 
@@ -247,7 +339,6 @@ User idea: ${prompt}
           <div className="promptFooter">
             <span>{prompt.length} characters</span>
 
-            {/* UPDATED BUTTON */}
             <button
               className="generateButton"
               onClick={handleGenerateVideo}
@@ -258,9 +349,14 @@ User idea: ${prompt}
           </div>
         </div>
 
-        {/* ========== NEW: STATUS + ERROR + VIDEO RESULT ========== */}
         {status && (
-          <div style={{ marginTop: "16px", color: "#facc15", fontSize: "14px" }}>
+          <div
+            style={{
+              marginTop: "16px",
+              color: "#facc15",
+              fontSize: "14px",
+            }}
+          >
             {status}
           </div>
         )}
@@ -283,19 +379,26 @@ User idea: ${prompt}
 
         {videoUrl && (
           <div style={{ marginTop: "24px" }}>
-            <h3 style={{ marginBottom: "12px" }}>Your Realistic Video</h3>
+            <h3 style={{ marginBottom: "12px" }}>
+              Your Realistic Video
+            </h3>
+
             <video
               src={videoUrl}
               controls
+              playsInline
               style={{
                 width: "100%",
                 borderRadius: "12px",
                 background: "#000",
               }}
             />
+
             <a
               href={videoUrl}
               download
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 display: "inline-block",
                 marginTop: "12px",
@@ -308,7 +411,6 @@ User idea: ${prompt}
           </div>
         )}
 
-        {/* BOMBA KEY */}
         <div
           style={{
             marginTop: "30px",
@@ -337,7 +439,9 @@ User idea: ${prompt}
               cursor: "pointer",
             }}
           >
-            {loadingKey ? "Generating..." : "Generate My Bomba Key"}
+            {loadingKey
+              ? "Generating..."
+              : "Generate My Bomba Key"}
           </button>
 
           {bombaKey && (
@@ -350,7 +454,9 @@ User idea: ${prompt}
                 wordBreak: "break-all",
               }}
             >
-              <code style={{ color: "#facc15" }}>{bombaKey}</code>
+              <code style={{ color: "#facc15" }}>
+                {bombaKey}
+              </code>
 
               <p style={{ fontSize: "12px", marginTop: "5px" }}>
                 Copy am! Na your own be this!
