@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const REPLICATE_API_URL =
-  "https://api.replicate.com/v1/models/minimax/video-01/predictions";
+  "https://api.replicate.com/v1/models/bytedance/seedance-2.5/predictions";
 
 export async function POST(request) {
   try {
@@ -21,6 +21,8 @@ export async function POST(request) {
     const mode = body?.mode || "Movie";
     const prompt = body?.prompt?.trim();
     const characterImage = body?.characterImage || null;
+    // Auto 30 seconds (can still be overridden from frontend)
+    const duration = body?.duration ?? 30;
 
     if (!prompt) {
       return NextResponse.json(
@@ -56,6 +58,7 @@ Make the scene visually match the story exactly.
 
     const input = {
       prompt: finalPrompt,
+      duration: duration, // 30 seconds by default
       prompt_optimizer: true,
     };
 
