@@ -6,6 +6,7 @@ export default function Home() {
   const [mode, setMode] = useState("Movie");
   const [prompt, setPrompt] = useState("");
   const [characterImage, setCharacterImage] = useState(null);
+
   const [bombaKey, setBombaKey] = useState("");
   const [loadingKey, setLoadingKey] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -68,6 +69,7 @@ export default function Home() {
 
   const removeCharacterImage = () => {
     setCharacterImage(null);
+
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -76,23 +78,52 @@ export default function Home() {
   const handleGenerateBombaKey = async () => {
     setLoadingKey(true);
     setError("");
+    setCopied(false);
 
     try {
       const res = await fetch("/api/keys/generate", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
       const data = await res.json();
 
-      if (data.apiKey) {
-        setBombaKey(data.apiKey);
+      if (!res.ok) {
+        throw new Error(
+          data.error || "Failed to generate BOMBA API key."
+        );
+      }
+
+      if (data.key) {
+        setBombaKey(data.key);
       } else {
-        alert("Error generating key: " + JSON.stringify(data));
+        throw new Error("No API key was returned.");
       }
     } catch (err) {
-      alert("Failed to generate key");
+      console.error(err);
+      setError(
+        err.message || "Failed to generate BOMBA API key."
+      );
     } finally {
       setLoadingKey(false);
+    }
+  };
+
+  const handleCopyKey = async () => {
+    if (!bombaKey) return;
+
+    try {
+      await navigator.clipboard.writeText(bombaKey);
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (err) {
+      console.error(err);
+      alert("Unable to copy the API key. Please copy it manually.");
     }
   };
 
@@ -107,14 +138,16 @@ export default function Home() {
     let attempts = 0;
     const maxAttempts = 90;
 
-    stopPolling(); // clear any previous interval just in case
+    stopPolling();
 
     pollingRef.current = setInterval(async () => {
       attempts++;
 
       try {
         const res = await fetch(
-          `/api/video/generate?predictionId=${encodeURIComponent(predictionId)}`,
+          `/api/video/generate?predictionId=${encodeURIComponent(
+            predictionId
+          )}`,
           {
             cache: "no-store",
           }
@@ -123,40 +156,63 @@ export default function Home() {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || "Unable to check video status.");
+          throw new Error(
+            data.error || "Unable to check video status."
+          );
         }
 
         if (data.status === "succeeded" && data.videoUrl) {
           stopPolling();
+
           setVideoUrl(data.videoUrl);
           setStatus("Video ready! 🎬");
           setLoading(false);
+
           return;
         }
 
-        if (data.status === "failed" || data.status === "canceled") {
+        if (
+          data.status === "failed" ||
+          data.status === "canceled"
+        ) {
           stopPolling();
-          setError(data.error || "Video generation failed.");
+
+          setError(
+            data.error || "Video generation failed."
+          );
+
           setStatus("");
           setLoading(false);
+
           return;
         }
 
         const seconds = attempts * 5;
-        setStatus(`Video is still being generated... ${seconds}s`);
+
+        setStatus(
+          `Video is still being generated... ${seconds}s`
+        );
 
         if (attempts >= maxAttempts) {
           stopPolling();
+
           setError(
             "Video is taking longer than expected. Please try again later."
           );
+
           setStatus("");
           setLoading(false);
         }
       } catch (err) {
         stopPolling();
+
         console.error(err);
-        setError(err.message || "Unable to check video generation status.");
+
+        setError(
+          err.message ||
+            "Unable to check video generation status."
+        );
+
         setStatus("");
         setLoading(false);
       }
@@ -179,16 +235,24 @@ export default function Home() {
     try {
       const realisticPrompt = `
 Photorealistic live-action video, cinematic quality, natural lighting, real human skin texture, realistic body movement, natural environment, no cartoon, no anime, no illustration style.
+
 Mode: ${mode}
-User idea: ${prompt}
+
+User idea:
+${prompt}
 `.trim();
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (bombaKey) {
+        headers["x-bomba-key"] = bombaKey;
+      }
 
       const res = await fetch("/api/video/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-         ...(bombaKey? { "x-bomba-key": bombaKey } : {}),
-        },
+        headers,
         body: JSON.stringify({
           mode,
           prompt: realisticPrompt,
@@ -199,7 +263,9 @@ User idea: ${prompt}
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to generate video");
+        throw new Error(
+          data.error || "Failed to generate video."
+        );
       }
 
       if (data.videoUrl) {
@@ -207,14 +273,24 @@ User idea: ${prompt}
         setStatus("Video ready! 🎬");
         setLoading(false);
       } else if (data.jobId) {
-        setStatus("Video is being generated... please wait 🎬");
+        setStatus(
+          "Video is being generated... please wait 🎬"
+        );
+
         pollVideo(data.jobId);
       } else {
-        throw new Error("No video job or video URL returned.");
+        throw new Error(
+          "No video job or video URL returned."
+        );
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || "Something went wrong while generating the video.");
+
+      setError(
+        err.message ||
+          "Something went wrong while generating the video."
+      );
+
       setStatus("");
       setLoading(false);
     }
@@ -228,11 +304,18 @@ User idea: ${prompt}
           <div className="subtitle">VIDEO STUDIO</div>
         </div>
 
-        <button className="profileButton">TB</button>
+        <button
+          type="button"
+          className="profileButton"
+        >
+          TB
+        </button>
       </header>
 
       <section className="hero">
-        <div className="badge">AI VIDEO PRODUCTION STUDIO</div>
+        <div className="badge">
+          AI VIDEO PRODUCTION STUDIO
+        </div>
 
         <h1>
           Turn your idea into a
@@ -240,8 +323,8 @@ User idea: ${prompt}
         </h1>
 
         <p>
-          Create characters, scenes, dialogue, voices, sound and cinematic
-          videos from one simple idea.
+          Create characters, scenes, dialogue, voices, sound
+          and cinematic videos from one simple idea.
         </p>
       </section>
 
@@ -252,7 +335,12 @@ User idea: ${prompt}
           {modes.map((item) => (
             <button
               key={item}
-              className={mode === item? "mode active" : "mode"}
+              type="button"
+              className={
+                mode === item
+                  ? "mode active"
+                  : "mode"
+              }
               onClick={() => setMode(item)}
             >
               {item}
@@ -264,13 +352,15 @@ User idea: ${prompt}
           <div className="characterHeader">
             <div>
               <h3>👤 Your Character</h3>
+
               <p>
-                Upload your photo to use yourself as the main character.
+                Upload your photo to use yourself as the
+                main character.
               </p>
             </div>
           </div>
 
-          {!characterImage? (
+          {!characterImage ? (
             <label className="uploadBox">
               <input
                 ref={fileInputRef}
@@ -281,8 +371,12 @@ User idea: ${prompt}
               />
 
               <div className="uploadIcon">📸</div>
+
               <strong>+ Add Your Photo</strong>
-              <span>PNG, JPG or WEBP · Maximum 10MB</span>
+
+              <span>
+                PNG, JPG or WEBP · Maximum 10MB
+              </span>
             </label>
           ) : (
             <div className="characterPreview">
@@ -292,10 +386,13 @@ User idea: ${prompt}
               />
 
               <div className="characterPreviewInfo">
-                <strong>✅ Character Photo Added</strong>
+                <strong>
+                  ✅ Character Photo Added
+                </strong>
 
                 <span>
-                  This photo will be used as your character reference.
+                  This photo will be used as your
+                  character reference.
                 </span>
 
                 <div className="characterActions">
@@ -306,6 +403,7 @@ User idea: ${prompt}
                       onChange={handleImageUpload}
                       hidden
                     />
+
                     Change Photo
                   </label>
 
@@ -327,19 +425,26 @@ User idea: ${prompt}
 
           <textarea
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) =>
+              setPrompt(e.target.value)
+            }
             placeholder="Example: I walk into a busy Nigerian market, meet my friend, shake hands with him and we laugh while people move naturally around us..."
           />
 
           <div className="promptFooter">
-            <span>{prompt.length} characters</span>
+            <span>
+              {prompt.length} characters
+            </span>
 
             <button
+              type="button"
               className="generateButton"
               onClick={handleGenerateVideo}
               disabled={loading}
             >
-              {loading? "Generating..." : "🎬 Generate Video"}
+              {loading
+                ? "Generating..."
+                : "🎬 Generate Video"}
             </button>
           </div>
         </div>
@@ -406,6 +511,7 @@ User idea: ${prompt}
           </div>
         )}
 
+        {/* BOMBA API KEY */}
         <div
           style={{
             marginTop: "30px",
@@ -417,11 +523,18 @@ User idea: ${prompt}
         >
           <h3>🔑 Get Your Bomba API Key (FREE)</h3>
 
-          <p style={{ fontSize: "14px", opacity: 0.7 }}>
-            Use this key to access Bomba API without paying us
+          <p
+            style={{
+              fontSize: "14px",
+              opacity: 0.7,
+            }}
+          >
+            Generate your BOMBA API key and use it to
+            access the BOMBA video generation system.
           </p>
 
           <button
+            type="button"
             onClick={handleGenerateBombaKey}
             disabled={loadingKey}
             style={{
@@ -431,11 +544,14 @@ User idea: ${prompt}
               padding: "10px 20px",
               borderRadius: "8px",
               fontWeight: "bold",
-              cursor: "pointer",
+              cursor: loadingKey
+                ? "not-allowed"
+                : "pointer",
+              border: "none",
             }}
           >
             {loadingKey
-             ? "Generating..."
+              ? "Generating..."
               : "Generate My Bomba Key"}
           </button>
 
@@ -446,34 +562,42 @@ User idea: ${prompt}
                 padding: "10px",
                 background: "black",
                 borderRadius: "8px",
-                wordBreak: "break-all",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: "10px",
+                flexWrap: "wrap",
               }}
             >
-              <code style={{ color: "#facc15", flex: 1 }}>
+              <code
+                style={{
+                  color: "#facc15",
+                  flex: 1,
+                  minWidth: "180px",
+                  wordBreak: "break-all",
+                }}
+              >
                 {bombaKey}
               </code>
+
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(bombaKey);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
+                type="button"
+                onClick={handleCopyKey}
                 style={{
                   background: "#facc15",
                   color: "black",
-                  padding: "6px 12px",
+                  padding: "8px 14px",
                   borderRadius: "6px",
                   fontWeight: "bold",
                   fontSize: "12px",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
+                  border: "none",
                 }}
               >
-                {copied? "Copied! ✅" : "Copy"}
+                {copied
+                  ? "Copied! ✅"
+                  : "Copy"}
               </button>
             </div>
           )}
@@ -487,25 +611,33 @@ User idea: ${prompt}
           <div>
             <strong>01</strong>
             <h3>Plan</h3>
-            <p>Turn your idea into scenes and shots.</p>
+            <p>
+              Turn your idea into scenes and shots.
+            </p>
           </div>
 
           <div>
             <strong>02</strong>
             <h3>Characters</h3>
-            <p>Create consistent realistic characters.</p>
+            <p>
+              Create consistent realistic characters.
+            </p>
           </div>
 
           <div>
             <strong>03</strong>
             <h3>Scenes</h3>
-            <p>Build realistic locations and actions.</p>
+            <p>
+              Build realistic locations and actions.
+            </p>
           </div>
 
           <div>
             <strong>04</strong>
             <h3>Generate</h3>
-            <p>Generate cinematic video clips.</p>
+            <p>
+              Generate cinematic video clips.
+            </p>
           </div>
         </div>
       </section>
@@ -527,3 +659,21 @@ User idea: ${prompt}
     </main>
   );
 }
+
+Commit it
+
+In GitHub:
+
+File name/path
+
+app/page.jsx
+
+Replace everything with the code above.
+
+Commit message
+
+Fix BOMBA API key generation and copy
+
+Leave the extended description empty, then Commit changes.
+
+After Vercel finishes deploying, test Generate My Bomba Key first. The key should appear with a visible Copy button. Don't change the video API route for this test.
