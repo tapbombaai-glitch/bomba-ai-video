@@ -15,6 +15,7 @@ export default function Home() {
   const [status, setStatus] = useState("");
 
   const pollingRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const modes = [
     "Movie",
@@ -52,7 +53,13 @@ export default function Home() {
     const reader = new FileReader();
 
     reader.onload = () => {
-      setCharacterImage(reader.result);
+      if (typeof reader.result === "string") {
+        setCharacterImage(reader.result);
+      }
+    };
+
+    reader.onerror = () => {
+      alert("Failed to read the image. Please try another file.");
     };
 
     reader.readAsDataURL(file);
@@ -60,10 +67,14 @@ export default function Home() {
 
   const removeCharacterImage = () => {
     setCharacterImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleGenerateBombaKey = async () => {
     setLoadingKey(true);
+    setError("");
 
     try {
       const res = await fetch("/api/keys/generate", {
@@ -79,9 +90,9 @@ export default function Home() {
       }
     } catch (err) {
       alert("Failed to generate key");
+    } finally {
+      setLoadingKey(false);
     }
-
-    setLoadingKey(false);
   };
 
   const stopPolling = () => {
@@ -95,14 +106,14 @@ export default function Home() {
     let attempts = 0;
     const maxAttempts = 90;
 
+    stopPolling(); // clear any previous interval just in case
+
     pollingRef.current = setInterval(async () => {
       attempts++;
 
       try {
         const res = await fetch(
-          `/api/video/generate?predictionId=${encodeURIComponent(
-            predictionId
-          )}`,
+          `/api/video/generate?predictionId=${encodeURIComponent(predictionId)}`,
           {
             cache: "no-store",
           }
@@ -116,7 +127,6 @@ export default function Home() {
 
         if (data.status === "succeeded" && data.videoUrl) {
           stopPolling();
-
           setVideoUrl(data.videoUrl);
           setStatus("Video ready! 🎬");
           setLoading(false);
@@ -125,7 +135,6 @@ export default function Home() {
 
         if (data.status === "failed" || data.status === "canceled") {
           stopPolling();
-
           setError(data.error || "Video generation failed.");
           setStatus("");
           setLoading(false);
@@ -133,14 +142,10 @@ export default function Home() {
         }
 
         const seconds = attempts * 5;
-
-        setStatus(
-          `Video is still being generated... ${seconds}s`
-        );
+        setStatus(`Video is still being generated... ${seconds}s`);
 
         if (attempts >= maxAttempts) {
           stopPolling();
-
           setError(
             "Video is taking longer than expected. Please try again later."
           );
@@ -149,12 +154,8 @@ export default function Home() {
         }
       } catch (err) {
         stopPolling();
-
         console.error(err);
-
-        setError(
-          err.message || "Unable to check video generation status."
-        );
+        setError(err.message || "Unable to check video generation status.");
         setStatus("");
         setLoading(false);
       }
@@ -205,22 +206,14 @@ User idea: ${prompt}
         setStatus("Video ready! 🎬");
         setLoading(false);
       } else if (data.jobId) {
-        setStatus(
-          "Video is being generated... please wait 🎬"
-        );
-
+        setStatus("Video is being generated... please wait 🎬");
         pollVideo(data.jobId);
       } else {
         throw new Error("No video job or video URL returned.");
       }
     } catch (err) {
       console.error(err);
-
-      setError(
-        err.message ||
-          "Something went wrong while generating the video."
-      );
-
+      setError(err.message || "Something went wrong while generating the video.");
       setStatus("");
       setLoading(false);
     }
@@ -279,6 +272,7 @@ User idea: ${prompt}
           {!characterImage ? (
             <label className="uploadBox">
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={handleImageUpload}
