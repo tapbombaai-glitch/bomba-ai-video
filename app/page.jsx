@@ -5,6 +5,8 @@ import { useState } from "react";
 export default function Home() {
   const [mode, setMode] = useState("Movie");
   const [prompt, setPrompt] = useState("");
+  const [bombaKey, setBombaKey] = useState("");
+  const [loadingKey, setLoadingKey] = useState(false);
 
   const modes = [
     "Movie",
@@ -15,6 +17,22 @@ export default function Home() {
     "Presenter",
     "Story",
   ];
+
+  const handleGenerateBombaKey = async () => {
+    setLoadingKey(true);
+    try {
+      const res = await fetch('/api/keys/generate', { method: 'POST' });
+      const data = await res.json();
+      if (data.apiKey) {
+        setBombaKey(data.apiKey);
+      } else {
+        alert("Error generating key: " + JSON.stringify(data));
+      }
+    } catch (err) {
+      alert("Failed to generate key");
+    }
+    setLoadingKey(false);
+  };
 
   return (
     <main className="studio">
@@ -73,6 +91,28 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* --- NEW BOMBA KEY SECTION --- */}
+        <div style={{ marginTop: '30px', padding: '20px', background: '#111', borderRadius: '12px', border: '1px dashed #facc15' }}>
+          <h3>🔑 Get Your Bomba API Key (FREE)</h3>
+          <p style={{ fontSize: '14px', opacity: 0.7 }}>Use this key to access Bomba API without paying us</p>
+          
+          <button 
+            onClick={handleGenerateBombaKey}
+            disabled={loadingKey}
+            style={{ marginTop: '10px', background: '#facc15', color: 'black', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            {loadingKey ? "Generating..." : "Generate My Bomba Key"}
+          </button>
+
+          {bombaKey && (
+            <div style={{ marginTop: '15px', padding: '10px', background: 'black', borderRadius: '8px', wordBreak: 'break-all' }}>
+              <code style={{ color: '#facc15' }}>{bombaKey}</code>
+              <p style={{ fontSize: '12px', marginTop: '5px' }}>Copy am! Na your own be this!</p>
+            </div>
+          )}
+        </div>
+
       </section>
 
       <section className="workflow">
