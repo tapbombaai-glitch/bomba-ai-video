@@ -9,6 +9,12 @@ export default function Home() {
   const [bombaKey, setBombaKey] = useState("");
   const [loadingKey, setLoadingKey] = useState(false);
 
+  // ========== NEW STATES (added) ==========
+  const [loading, setLoading] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+
   const modes = [
     "Movie",
     "Program",
@@ -67,6 +73,64 @@ export default function Home() {
     }
 
     setLoadingKey(false);
+  };
+
+  // ========== NEW FUNCTION: GENERATE VIDEO ==========
+  const handleGenerateVideo = async () => {
+    if (!prompt.trim()) {
+      setError("Please describe your video first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setVideoUrl(null);
+    setStatus("Preparing your realistic video...");
+
+    try {
+      // Strong realistic style instruction (added so it doesn't become cartoon)
+      const realisticPrompt = `
+Photorealistic live-action video, cinematic quality, natural lighting, real human skin texture, realistic body movement, natural environment, no cartoon, no anime, no illustration style.
+Mode: ${mode}
+User idea: ${prompt}
+`.trim();
+
+      const res = await fetch("/api/video/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(bombaKey ? { "x-bomba-key": bombaKey } : {}),
+        },
+        body: JSON.stringify({
+          mode,
+          prompt: realisticPrompt,
+          characterImage, // base64 image (if uploaded)
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate video");
+      }
+
+      if (data.videoUrl) {
+        setVideoUrl(data.videoUrl);
+        setStatus("Video ready!");
+      } else if (data.jobId) {
+        // If your backend returns a jobId (asynchronous generation)
+        setStatus("Video is being generated... this may take 1–3 minutes");
+        // You can add polling here later
+      } else {
+        throw new Error("No video URL returned");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Something went wrong while generating the video");
+      setStatus("");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -183,11 +247,66 @@ export default function Home() {
           <div className="promptFooter">
             <span>{prompt.length} characters</span>
 
-            <button className="generateButton">
-              🎬 Generate Video
+            {/* UPDATED BUTTON */}
+            <button
+              className="generateButton"
+              onClick={handleGenerateVideo}
+              disabled={loading}
+            >
+              {loading ? "Generating..." : "🎬 Generate Video"}
             </button>
           </div>
         </div>
+
+        {/* ========== NEW: STATUS + ERROR + VIDEO RESULT ========== */}
+        {status && (
+          <div style={{ marginTop: "16px", color: "#facc15", fontSize: "14px" }}>
+            {status}
+          </div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "12px",
+              background: "#3f1111",
+              border: "1px solid #ef4444",
+              borderRadius: "8px",
+              color: "#fca5a5",
+              fontSize: "14px",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {videoUrl && (
+          <div style={{ marginTop: "24px" }}>
+            <h3 style={{ marginBottom: "12px" }}>Your Realistic Video</h3>
+            <video
+              src={videoUrl}
+              controls
+              style={{
+                width: "100%",
+                borderRadius: "12px",
+                background: "#000",
+              }}
+            />
+            <a
+              href={videoUrl}
+              download
+              style={{
+                display: "inline-block",
+                marginTop: "12px",
+                color: "#facc15",
+                textDecoration: "underline",
+              }}
+            >
+              Download Video
+            </a>
+          </div>
+        )}
 
         {/* BOMBA KEY */}
         <div
