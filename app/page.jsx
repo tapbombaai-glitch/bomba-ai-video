@@ -7,10 +7,6 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [characterImage, setCharacterImage] = useState(null);
 
-  const [bombaKey, setBombaKey] = useState("");
-  const [loadingKey, setLoadingKey] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [error, setError] = useState("");
@@ -72,94 +68,6 @@ export default function Home() {
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
-    }
-  };
-
-  const handleGenerateBombaKey = async () => {
-    setLoadingKey(true);
-    setError("");
-    setCopied(false);
-
-    try {
-      const res = await fetch("/api/keys/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data.error || "Failed to generate BOMBA API key."
-        );
-      }
-
-      if (data.key) {
-        setBombaKey(data.key);
-      } else {
-        throw new Error("No API key was returned.");
-      }
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err.message || "Failed to generate BOMBA API key."
-      );
-    } finally {
-      setLoadingKey(false);
-    }
-  };
-
-  const handleCopyKey = async () => {
-    if (!bombaKey) return;
-
-    try {
-      if (
-        navigator.clipboard &&
-        window.isSecureContext
-      ) {
-        await navigator.clipboard.writeText(bombaKey);
-      } else {
-        const textArea = document.createElement("textarea");
-
-        textArea.value = bombaKey;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        textArea.style.opacity = "0";
-
-        document.body.appendChild(textArea);
-
-        textArea.focus();
-        textArea.select();
-        textArea.setSelectionRange(
-          0,
-          textArea.value.length
-        );
-
-        const successful =
-          document.execCommand("copy");
-
-        document.body.removeChild(textArea);
-
-        if (!successful) {
-          throw new Error("Copy command failed.");
-        }
-      }
-
-      setCopied(true);
-
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (err) {
-      console.error(err);
-
-      alert(
-        "Unable to copy automatically. Please press and hold the key and copy it manually."
-      );
     }
   };
 
@@ -284,10 +192,6 @@ ${prompt}
       const headers = {
         "Content-Type": "application/json",
       };
-
-      if (bombaKey) {
-        headers["x-bomba-key"] = bombaKey;
-      }
 
       const res = await fetch("/api/video/generate", {
         method: "POST",
@@ -549,97 +453,6 @@ ${prompt}
             </a>
           </div>
         )}
-
-        <div
-          style={{
-            marginTop: "30px",
-            padding: "20px",
-            background: "#111",
-            borderRadius: "12px",
-            border: "1px dashed #facc15",
-          }}
-        >
-          <h3>🔑 Get Your Bomba API Key (FREE)</h3>
-
-          <p
-            style={{
-              fontSize: "14px",
-              opacity: 0.7,
-            }}
-          >
-            Generate your BOMBA API key and use it to
-            access the BOMBA video generation system.
-          </p>
-
-          <button
-            type="button"
-            onClick={handleGenerateBombaKey}
-            disabled={loadingKey}
-            style={{
-              marginTop: "10px",
-              background: "#facc15",
-              color: "black",
-              padding: "10px 20px",
-              borderRadius: "8px",
-              fontWeight: "bold",
-              cursor: loadingKey
-                ? "not-allowed"
-                : "pointer",
-              border: "none",
-            }}
-          >
-            {loadingKey
-              ? "Generating..."
-              : "Generate My Bomba Key"}
-          </button>
-
-          {bombaKey && (
-            <div
-              style={{
-                marginTop: "15px",
-                padding: "10px",
-                background: "black",
-                borderRadius: "8px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "10px",
-                flexWrap: "wrap",
-              }}
-            >
-              <code
-                style={{
-                  color: "#facc15",
-                  flex: 1,
-                  minWidth: "180px",
-                  wordBreak: "break-all",
-                }}
-              >
-                {bombaKey}
-              </code>
-
-              <button
-                type="button"
-                onClick={handleCopyKey}
-                style={{
-                  background: "#facc15",
-                  color: "black",
-                  padding: "8px 14px",
-                  borderRadius: "6px",
-                  fontWeight: "bold",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  border: "none",
-                }}
-              >
-                {copied
-                  ? "Copied! ✅"
-                  : "Copy"}
-              </button>
-            </div>
-          )}
-        </div>
       </section>
 
       <section className="workflow">
