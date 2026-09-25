@@ -41,8 +41,7 @@ export async function POST(req) {
 
     // 3. Generate new key
     const key_code =
-      "bomba_" +
-      Math.random().toString(36).substring(2, 15) +
+      "bomba_" + Math.random().toString(36).substring(2, 15) + 
       Math.random().toString(36).substring(2, 8);
 
     // 4. Insert into database
