@@ -247,12 +247,39 @@ ${prompt}
           <div className="subtitle">VIDEO STUDIO</div>
         </div>
 
-        <button
-          type="button"
-          className="profileButton"
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
         >
-          TB
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/api-key";
+            }}
+            style={{
+              padding: "10px 14px",
+              borderRadius: "10px",
+              border: "1px solid #FFD43B",
+              background: "#FFD43B",
+              color: "#000",
+              fontWeight: "800",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            🔑 API KEY
+          </button>
+
+          <button
+            type="button"
+            className="profileButton"
+          >
+            TB
+          </button>
+        </div>
       </header>
 
       <section className="hero">
