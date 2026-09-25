@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 export default function Home() {
   const [mode, setMode] = useState("Movie");
@@ -11,6 +12,12 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiEmail, setApiEmail] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiMessage, setApiMessage] = useState("");
 
   const pollingRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -239,6 +246,74 @@ ${prompt}
     }
   };
 
+  const generateApiKey = async () => {
+    setApiMessage("");
+    setApiKey("");
+
+    if (!apiEmail.trim()) {
+      setApiMessage("Please enter your email address.");
+      return;
+    }
+
+    setApiLoading(true);
+
+    try {
+      const keyCode =
+        "bomba_" +
+        Math.random().toString(36).substring(2, 15);
+
+      const { data, error } = await supabase
+        .from("bomba_keys")
+        .insert([
+          {
+            key_code: keyCode,
+            email: apiEmail.trim(),
+            videos_allowed: 20,
+            videos_used: 0,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error("BOMBA API KEY ERROR:", error);
+
+        throw new Error(
+          error.message || "Unable to create API Key."
+        );
+      }
+
+      setApiKey(data.key_code);
+
+      setApiMessage(
+        "Your BOMBA API Key has been created successfully."
+      );
+    } catch (err) {
+      console.error(err);
+
+      setApiMessage(
+        err.message ||
+          "Unable to create API Key. Please try again."
+      );
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const copyApiKey = async () => {
+    if (!apiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(apiKey);
+
+      setApiMessage("API Key copied successfully! 📋");
+    } catch {
+      setApiMessage(
+        "Unable to copy automatically. Please copy the key manually."
+      );
+    }
+  };
+
   return (
     <main className="studio">
       <header className="topbar">
@@ -257,7 +332,8 @@ ${prompt}
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/api-key";
+              setShowApiKey(true);
+              setApiMessage("");
             }}
             style={{
               padding: "10px 14px",
@@ -281,6 +357,193 @@ ${prompt}
           </button>
         </div>
       </header>
+
+      {showApiKey && (
+        <section
+          style={{
+            margin: "20px auto",
+            width: "calc(100% - 32px)",
+            maxWidth: "720px",
+            background: "#111111",
+            border: "1px solid #292929",
+            borderRadius: "18px",
+            padding: "24px",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "12px",
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  color: "#ffffff",
+                }}
+              >
+                🔑 Get Your BOMBA API Key
+              </h2>
+
+              <p
+                style={{
+                  color: "#aaaaaa",
+                  lineHeight: "1.5",
+                  marginBottom: 0,
+                }}
+              >
+                Enter your email address to generate
+                your BOMBA API Key.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowApiKey(false)}
+              style={{
+                border: "1px solid #444",
+                background: "#080808",
+                color: "#ffffff",
+                borderRadius: "9px",
+                padding: "8px 12px",
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <label
+            style={{
+              display: "block",
+              color: "#dddddd",
+              fontSize: "14px",
+              marginBottom: "8px",
+              marginTop: "20px",
+            }}
+          >
+            Email Address
+          </label>
+
+          <input
+            type="email"
+            value={apiEmail}
+            onChange={(event) =>
+              setApiEmail(event.target.value)
+            }
+            placeholder="you@example.com"
+            disabled={apiLoading}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "14px",
+              borderRadius: "10px",
+              border: "1px solid #333333",
+              background: "#080808",
+              color: "#ffffff",
+              fontSize: "16px",
+              outline: "none",
+              marginBottom: "14px",
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={generateApiKey}
+            disabled={apiLoading}
+            style={{
+              width: "100%",
+              padding: "14px",
+              border: "none",
+              borderRadius: "10px",
+              background: apiLoading
+                ? "#8d7920"
+                : "#FFD43B",
+              color: "#000000",
+              fontWeight: "800",
+              fontSize: "15px",
+              cursor: apiLoading
+                ? "not-allowed"
+                : "pointer",
+            }}
+          >
+            {apiLoading
+              ? "GENERATING..."
+              : "GENERATE API KEY"}
+          </button>
+
+          {apiKey && (
+            <div
+              style={{
+                marginTop: "18px",
+                padding: "16px",
+                borderRadius: "12px",
+                background: "#080808",
+                border: "1px solid #FFD43B",
+              }}
+            >
+              <div
+                style={{
+                  color: "#aaaaaa",
+                  fontSize: "12px",
+                  marginBottom: "8px",
+                }}
+              >
+                YOUR BOMBA API KEY
+              </div>
+
+              <div
+                style={{
+                  color: "#FFD43B",
+                  fontWeight: "700",
+                  wordBreak: "break-all",
+                  marginBottom: "12px",
+                }}
+              >
+                {apiKey}
+              </div>
+
+              <button
+                type="button"
+                onClick={copyApiKey}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "9px",
+                  border: "1px solid #FFD43B",
+                  background: "transparent",
+                  color: "#FFD43B",
+                  fontWeight: "800",
+                  cursor: "pointer",
+                }}
+              >
+                📋 COPY API KEY
+              </button>
+            </div>
+          )}
+
+          {apiMessage && (
+            <div
+              style={{
+                marginTop: "14px",
+                padding: "11px",
+                borderRadius: "9px",
+                background: "#181818",
+                color: "#dddddd",
+                fontSize: "14px",
+                lineHeight: "1.5",
+              }}
+            >
+              {apiMessage}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="hero">
         <div className="badge">
