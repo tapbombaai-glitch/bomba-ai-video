@@ -2,20 +2,23 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const BYTEPLUS_API_URL =
-  "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks";
+const MINIMAX_API_URL =
+  "https://api.minimax.io/v2/video_generation";
 
-const BYTEPLUS_MODEL = "dreamina-seedance-2-5-260628";
+const MINIMAX_QUERY_URL =
+  "https://api.minimax.io/v2/query/video_generation";
+
+const MINIMAX_MODEL = "MiniMax-H3";
 
 export async function POST(request) {
   try {
-    const apiKey = process.env.ARK_API_KEY;
+    const apiKey = process.env.MINIMAX_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "ARK_API_KEY is missing. Add your BytePlus ModelArk API key in Vercel.",
+            "MINIMAX_API_KEY is missing. Add your MiniMax API key in Vercel.",
         },
         { status: 500 }
       );
@@ -27,8 +30,6 @@ export async function POST(request) {
     const prompt = body?.prompt?.trim();
     const characterImage = body?.characterImage || null;
 
-    let duration = Number(body?.duration ?? 4);
-
     if (!prompt) {
       return NextResponse.json(
         {
@@ -38,15 +39,13 @@ export async function POST(request) {
       );
     }
 
-    if (!Number.isFinite(duration)) {
-      duration = 4;
-    }
-
-    // Seedance 2.5 supports 4–30 seconds.
-    duration = Math.max(
-      4,
-      Math.min(30, Math.round(duration))
-    );
+    /*
+     * First BOMBA H3 test:
+     * 10 seconds at 768P.
+     *
+     * MiniMax H3 supports 4–15 seconds.
+     */
+    const duration = 10;
 
     const finalPrompt = `
 Create a realistic live-action cinematic video.
@@ -88,10 +87,11 @@ Do not use fantasy-looking characters unless specifically requested.
     ];
 
     /*
-     * Character image support.
+     * If the frontend sends a character image,
+     * use it as the first frame.
      *
-     * BytePlus accepts image_url content.
-     * We only add it when the frontend actually sends an image.
+     * MiniMax requires a public image URL for reliable
+     * image-to-video requests.
      */
     if (characterImage) {
       content.push({
@@ -104,25 +104,25 @@ Do not use fantasy-looking characters unless specifically requested.
     }
 
     const requestBody = {
-      model: BYTEPLUS_MODEL,
+      model: MINIMAX_MODEL,
       content,
-      generate_audio: true,
-      ratio: "adaptive",
+      resolution: "768P",
       duration,
-      watermark: false,
+      ratio: characterImage ? "adaptive" : "16:9",
     };
 
     console.log(
-      "BYTEPLUS CREATE REQUEST:",
+      "MINIMAX H3 CREATE REQUEST:",
       JSON.stringify({
-        model: BYTEPLUS_MODEL,
+        model: MINIMAX_MODEL,
         mode,
         duration,
+        resolution: "768P",
         hasCharacterImage: Boolean(characterImage),
       })
     );
 
-    const response = await fetch(BYTEPLUS_API_URL, {
+    const response = await fetch(MINIMAX_API_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -136,20 +136,25 @@ Do not use fantasy-looking characters unless specifically requested.
 
     if (!response.ok) {
       console.error(
-        "BYTEPLUS CREATE ERROR:",
+        "MINIMAX H3 CREATE ERROR:",
         JSON.stringify(data)
       );
 
-      const bytePlusError =
+      const minimaxError =
         data?.error?.message ||
         data?.message ||
-        data?.error ||
-        "BytePlus could not start the video generation.";
+        "MiniMax could not start the video generation.";
 
       return NextResponse.json(
         {
-          error: bytePlusError,
-          code: data?.error?.code || null,
+          error: minimaxError,
+          code:
+            data?.error?.http_code ||
+            data?.error?.code ||
+            null,
+          requestId:
+            data?.request_id ||
+            null,
         },
         {
           status: response.status,
@@ -157,25 +162,25 @@ Do not use fantasy-looking characters unless specifically requested.
       );
     }
 
-    const taskId = data?.id;
+    const taskId = data?.task_id;
 
     if (!taskId) {
       console.error(
-        "BYTEPLUS NO TASK ID:",
+        "MINIMAX H3 NO TASK ID:",
         JSON.stringify(data)
       );
 
       return NextResponse.json(
         {
           error:
-            "BytePlus accepted the request but returned no task ID.",
+            "MiniMax accepted the request but returned no task ID.",
         },
         { status: 500 }
       );
     }
 
     console.log(
-      "BYTEPLUS TASK CREATED:",
+      "MINIMAX H3 TASK CREATED:",
       taskId
     );
 
@@ -185,11 +190,11 @@ Do not use fantasy-looking characters unless specifically requested.
       jobId: taskId,
       predictionId: taskId,
       message:
-        "Video generation started with BytePlus Seedance 2.5.",
+        "Video generation started with MiniMax H3.",
     });
   } catch (error) {
     console.error(
-      "BOMBA BYTEPLUS VIDEO ERROR:",
+      "BOMBA MINIMAX H3 VIDEO ERROR:",
       error
     );
 
@@ -197,7 +202,7 @@ Do not use fantasy-looking characters unless specifically requested.
       {
         error:
           error?.message ||
-          "Unexpected error while starting BytePlus video generation.",
+          "Unexpected error while starting MiniMax H3 video generation.",
       },
       { status: 500 }
     );
@@ -206,13 +211,13 @@ Do not use fantasy-looking characters unless specifically requested.
 
 export async function GET(request) {
   try {
-    const apiKey = process.env.ARK_API_KEY;
+    const apiKey = process.env.MINIMAX_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "ARK_API_KEY is missing. Add your BytePlus ModelArk API key in Vercel.",
+            "MINIMAX_API_KEY is missing. Add your MiniMax API key in Vercel.",
         },
         { status: 500 }
       );
@@ -237,14 +242,13 @@ export async function GET(request) {
     }
 
     const response = await fetch(
-      `${BYTEPLUS_API_URL}/${encodeURIComponent(
+      `${MINIMAX_QUERY_URL}/${encodeURIComponent(
         taskId
       )}`,
       {
         method: "GET",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
         },
         cache: "no-store",
       }
@@ -254,7 +258,7 @@ export async function GET(request) {
 
     if (!response.ok) {
       console.error(
-        "BYTEPLUS STATUS ERROR:",
+        "MINIMAX H3 STATUS ERROR:",
         JSON.stringify(data)
       );
 
@@ -263,8 +267,7 @@ export async function GET(request) {
           error:
             data?.error?.message ||
             data?.message ||
-            data?.error ||
-            "Could not check BytePlus video status.",
+            "Could not check MiniMax video status.",
         },
         {
           status: response.status,
@@ -272,10 +275,11 @@ export async function GET(request) {
       );
     }
 
-    const status = data?.status;
+    const task = data?.task;
+    const status = task?.status;
 
     console.log(
-      "BYTEPLUS TASK STATUS:",
+      "MINIMAX H3 TASK STATUS:",
       taskId,
       status
     );
@@ -286,11 +290,11 @@ export async function GET(request) {
           success: false,
           status: "failed",
           predictionId:
-            data?.id || taskId,
+            task?.id || taskId,
           error:
-            data?.error?.message ||
-            data?.error ||
-            "BytePlus video generation failed.",
+            task?.error?.message ||
+            task?.error ||
+            "MiniMax H3 video generation failed.",
         },
         { status: 500 }
       );
@@ -302,16 +306,16 @@ export async function GET(request) {
           success: false,
           status: "cancelled",
           predictionId:
-            data?.id || taskId,
+            task?.id || taskId,
           error:
-            "BytePlus video generation was cancelled.",
+            "MiniMax H3 video generation was cancelled.",
         },
         { status: 500 }
       );
     }
 
     const videoUrl =
-      data?.content?.video_url || null;
+      task?.content?.url || null;
 
     if (
       status === "succeeded" &&
@@ -322,23 +326,22 @@ export async function GET(request) {
         status: "succeeded",
         videoUrl,
         predictionId:
-          data?.id || taskId,
+          task?.id || taskId,
       });
     }
 
     return NextResponse.json({
       success: true,
-      status:
-        status || "running",
+      status: status || "running",
       videoUrl: null,
       predictionId:
-        data?.id || taskId,
+        task?.id || taskId,
       message:
         "Video is still being generated.",
     });
   } catch (error) {
     console.error(
-      "BOMBA BYTEPLUS STATUS ERROR:",
+      "BOMBA MINIMAX H3 STATUS ERROR:",
       error
     );
 
@@ -346,7 +349,7 @@ export async function GET(request) {
       {
         error:
           error?.message ||
-          "Unexpected error while checking BytePlus video status.",
+          "Unexpected error while checking MiniMax H3 video status.",
       },
       { status: 500 }
     );
