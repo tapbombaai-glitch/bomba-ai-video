@@ -60,23 +60,15 @@ function makeWanFileUrl(value) {
     return value;
   }
 
-  /*
-   * Gradio can return:
-   *
-   * /file=...
-   *
-   * or a filesystem path.
-   */
-
   if (value.startsWith("/file=")) {
-    return `\( {WAN_API_BASE} \){value}`;
+    return `${WAN_API_BASE}${value}`;
   }
 
   if (value.startsWith("file=")) {
-    return `\( {WAN_API_BASE}/ \){value}`;
+    return `${WAN_API_BASE}/${value}`;
   }
 
-  return `\( {WAN_API_BASE}/gradio_api/file= \){encodeURIComponent(
+  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(
     value
   )}`;
 }
@@ -90,7 +82,6 @@ function extractVideoUrl(value) {
     return null;
   }
 
-  /* Direct URL/string */
   if (typeof value === "string") {
     if (
       value.startsWith("http://") ||
@@ -109,7 +100,6 @@ function extractVideoUrl(value) {
     return null;
   }
 
-  /* Gradio FileData */
   if (typeof value === "object") {
     if (value.url) {
       const url = makeWanFileUrl(value.url);
@@ -127,10 +117,6 @@ function extractVideoUrl(value) {
       }
     }
 
-    /*
-     * Some Gradio responses may expose a file
-     * under a nested "data" property.
-     */
     if (value.data) {
       const nested = extractVideoUrl(value.data);
 
@@ -152,18 +138,15 @@ function findVideoInResult(result) {
     return null;
   }
 
-  /* Try direct value first */
   const direct = extractVideoUrl(result);
 
   if (direct) {
     return direct;
   }
 
-  /* Array */
   if (Array.isArray(result)) {
     for (const item of result) {
-      const found =
-        findVideoInResult(item);
+      const found = findVideoInResult(item);
 
       if (found) {
         return found;
@@ -173,7 +156,6 @@ function findVideoInResult(result) {
     return null;
   }
 
-  /* Object */
   if (typeof result === "object") {
     const possibleKeys = [
       "output",
@@ -196,10 +178,9 @@ function findVideoInResult(result) {
           key
         )
       ) {
-        const found =
-          findVideoInResult(
-            result[key]
-          );
+        const found = findVideoInResult(
+          result[key]
+        );
 
         if (found) {
           return found;
@@ -216,14 +197,11 @@ function findVideoInResult(result) {
 --------------------------------------------------------- */
 
 function parsePossibleJson(value) {
-  if (
-    typeof value !== "string"
-  ) {
+  if (typeof value !== "string") {
     return value;
   }
 
-  const trimmed =
-    value.trim();
+  const trimmed = value.trim();
 
   if (!trimmed) {
     return value;
@@ -243,19 +221,11 @@ function parsePossibleJson(value) {
 function parseSSE(text) {
   const events = [];
 
-  if (
-    !text ||
-    typeof text !== "string"
-  ) {
+  if (!text || typeof text !== "string") {
     return events;
   }
 
-  /*
-   * SSE normally separates events with
-   * a blank line.
-   */
-  const blocks =
-    text.split(/\r?\n\r?\n/);
+  const blocks = text.split(/\r?\n\r?\n/);
 
   for (const block of blocks) {
     if (!block.trim()) {
@@ -263,24 +233,18 @@ function parseSSE(text) {
     }
 
     let eventName = "";
-    let dataLines = [];
+    const dataLines = [];
 
-    const lines =
-      block.split(/\r?\n/);
+    const lines = block.split(/\r?\n/);
 
     for (const line of lines) {
-      if (
-        line.startsWith("event:")
-      ) {
-        eventName =
-          line
-            .substring(6)
-            .trim();
+      if (line.startsWith("event:")) {
+        eventName = line
+          .substring(6)
+          .trim();
       }
 
-      if (
-        line.startsWith("data:")
-      ) {
+      if (line.startsWith("data:")) {
         dataLines.push(
           line
             .substring(5)
@@ -289,35 +253,18 @@ function parseSSE(text) {
       }
     }
 
-    if (
-      dataLines.length === 0
-    ) {
+    if (dataLines.length === 0) {
       continue;
     }
 
-    const dataText =
-      dataLines.join("\n");
+    const dataText = dataLines.join("\n");
 
-    let data =
-      parsePossibleJson(
-        dataText
-      );
+    let data = parsePossibleJson(dataText);
 
-    /*
-     * Sometimes the "data" itself can
-     * contain another JSON string.
-     */
-    if (
-      typeof data === "string"
-    ) {
-      const second =
-        parsePossibleJson(
-          data
-        );
+    if (typeof data === "string") {
+      const second = parsePossibleJson(data);
 
-      if (
-        second !== data
-      ) {
+      if (second !== data) {
         data = second;
       }
     }
@@ -332,13 +279,12 @@ function parseSSE(text) {
 }
 
 /* ---------------------------------------------------------
-   LOGGING
+   SAFE LOGGING
 --------------------------------------------------------- */
 
 function safeLogData(data) {
   try {
-    const text =
-      JSON.stringify(data);
+    const text = JSON.stringify(data);
 
     if (text.length > 4000) {
       return (
@@ -360,19 +306,16 @@ function safeLogData(data) {
 
 export async function POST(request) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const mode =
-      body?.mode ||
-      "Movie";
+      body?.mode || "Movie";
 
     const prompt =
       body?.prompt?.trim();
 
     const characterImage =
-      body?.characterImage ||
-      null;
+      body?.characterImage || null;
 
     if (!prompt) {
       return NextResponse.json(
@@ -399,9 +342,7 @@ export async function POST(request) {
     }
 
     const imageData =
-      getImageData(
-        characterImage
-      );
+      getImageData(characterImage);
 
     if (!imageData) {
       return NextResponse.json(
@@ -444,28 +385,27 @@ Do not use 3D cartoon style.
 `.trim();
 
     /*
-     * EXACT ORDER FROM THE WAN SPACE OPENAPI SCHEMA
-     * Values aligned closer to the Space defaults
-     * to reduce instant failures on ZeroGPU.
+     * Exact order from the Wan Space OpenAPI schema.
      */
+
     const data = [
       imageData,               // 1 input_image
       imageData,               // 2 last_image
       finalPrompt,             // 3 prompt
-      6,                       // 4 steps          (Space default)
+      6,                       // 4 steps
       DEFAULT_NEGATIVE_PROMPT, // 5 negative_prompt
       4,                       // 6 duration_seconds
-      1,                       // 7 guidance_scale  (Space default)
+      1,                       // 7 guidance_scale
       1,                       // 8 guidance_scale_2
       0,                       // 9 seed
       true,                    // 10 randomize_seed
-      6,                       // 11 quality        (Space default)
-      "UniPCMultistep",        // 12 scheduler      (Space default)
+      6,                       // 11 quality
+      "UniPCMultistep",        // 12 scheduler
       3,                       // 13 flow_shift
-      16,                      // 14 frame_multiplier (safer than 64)
+      16,                      // 14 frame_multiplier
       true,                    // 15 safe_mode
       [],                      // 16 lora_groups
-      true,                    // 17 auto_lora_enabled (Space default)
+      false,                   // 17 auto_lora_enabled
       true,                    // 18 video_component
     ];
 
@@ -478,26 +418,25 @@ Do not use 3D cartoon style.
         quality: 6,
         safeMode: true,
         loraGroups: [],
-        autoLora: true,
+        autoLora: false,
         hasImage: true,
       })
     );
 
-    const response =
-      await fetch(
-        WAN_CALL_URL,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            data,
-          }),
-          cache: "no-store",
-        }
-      );
+    const response = await fetch(
+      WAN_CALL_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          data,
+        }),
+        cache: "no-store",
+      }
+    );
 
     const responseText =
       await response.text();
@@ -518,18 +457,14 @@ Do not use 3D cartoon style.
 
       try {
         const errorData =
-          JSON.parse(
-            responseText
-          );
+          JSON.parse(responseText);
 
         errorMessage =
           errorData?.error ||
           errorData?.message ||
           errorMessage;
       } catch {
-        if (
-          responseText
-        ) {
+        if (responseText) {
           errorMessage =
             responseText.substring(
               0,
@@ -542,13 +477,11 @@ Do not use 3D cartoon style.
         {
           success: false,
           status: "failed",
-          error:
-            errorMessage,
+          error: errorMessage,
         },
         {
           status:
-            response.status ||
-            500,
+            response.status || 500,
         }
       );
     }
@@ -557,9 +490,7 @@ Do not use 3D cartoon style.
 
     try {
       result =
-        JSON.parse(
-          responseText
-        );
+        JSON.parse(responseText);
     } catch {
       result = null;
     }
@@ -664,13 +595,6 @@ export async function GET(request) {
   );
 
   try {
-    /*
-     * Give the HF stream enough time to return
-     * a completed generation.
-     *
-     * If it is still generating, the timeout
-     * below returns a normal "running" response.
-     */
     const controller =
       new AbortController();
 
@@ -682,24 +606,23 @@ export async function GET(request) {
     let response;
 
     try {
-      response =
-        await fetch(
-          `\( {WAN_RESULT_URL}/ \){encodeURIComponent(
-            eventId
-          )}`,
-          {
-            method: "GET",
-            headers: {
-              Accept:
-                "text/event-stream",
-              "Cache-Control":
-                "no-cache",
-            },
-            signal:
-              controller.signal,
-            cache: "no-store",
-          }
-        );
+      response = await fetch(
+        `${WAN_RESULT_URL}/${encodeURIComponent(
+          eventId
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            Accept:
+              "text/event-stream",
+            "Cache-Control":
+              "no-cache",
+          },
+          signal:
+            controller.signal,
+          cache: "no-store",
+        }
+      );
     } finally {
       clearTimeout(timeout);
     }
@@ -710,11 +633,6 @@ export async function GET(request) {
       eventId
     );
 
-    /*
-     * If HF returns a non-200 response,
-     * don't immediately tell the frontend
-     * that the video generation itself failed.
-     */
     if (!response.ok) {
       const errorText =
         await response.text();
@@ -729,8 +647,7 @@ export async function GET(request) {
         success: true,
         status: "running",
         videoUrl: null,
-        predictionId:
-          eventId,
+        predictionId: eventId,
         message:
           "Wan 2.2 is still processing the video.",
       });
@@ -759,9 +676,9 @@ export async function GET(request) {
     /*
      * Check newest events first.
      */
+
     for (
-      let i =
-        events.length - 1;
+      let i = events.length - 1;
       i >= 0;
       i--
     ) {
@@ -773,14 +690,13 @@ export async function GET(request) {
           event.event || ""
         ).toLowerCase();
 
-      /*
-       * COMPLETE
-       */
+      /* ---------------------------------------------------
+         COMPLETE
+      --------------------------------------------------- */
+
       if (
-        eventName ===
-          "complete" ||
-        eventName ===
-          "completed"
+        eventName === "complete" ||
+        eventName === "completed"
       ) {
         console.log(
           "WAN 2.2 COMPLETE EVENT:",
@@ -804,17 +720,12 @@ export async function GET(request) {
             success: true,
             status: "succeeded",
             videoUrl,
-            predictionId:
-              eventId,
+            predictionId: eventId,
             message:
               "Wan 2.2 video is ready.",
           });
         }
 
-        /*
-         * Sometimes the result may be nested
-         * inside a JSON string.
-         */
         const parsedData =
           parsePossibleJson(
             event.data
@@ -825,9 +736,7 @@ export async function GET(request) {
             parsedData
           );
 
-        if (
-          secondVideoUrl
-        ) {
+        if (secondVideoUrl) {
           console.log(
             "WAN 2.2 VIDEO READY AFTER PARSE:",
             secondVideoUrl
@@ -838,8 +747,7 @@ export async function GET(request) {
             status: "succeeded",
             videoUrl:
               secondVideoUrl,
-            predictionId:
-              eventId,
+            predictionId: eventId,
             message:
               "Wan 2.2 video is ready.",
           });
@@ -856,8 +764,7 @@ export async function GET(request) {
           {
             success: false,
             status: "failed",
-            predictionId:
-              eventId,
+            predictionId: eventId,
             error:
               "Wan 2.2 completed, but no video file was returned.",
           },
@@ -867,22 +774,11 @@ export async function GET(request) {
         );
       }
 
-      /*
-       * ERROR
-       * -------------------------------------------------
-       * IMPORTANT FIX:
-       * This Space (ZeroGPU) very often returns
-       *   event: error
-       *   data: null
-       * right after the job is created.
-       * Treating null/empty as hard failure was causing
-       * the 500s you saw in the logs.
-       * Only fail when there is a real error message.
-       */
-      if (
-        eventName ===
-        "error"
-      ) {
+      /* ---------------------------------------------------
+         ERROR
+      --------------------------------------------------- */
+
+      if (eventName === "error") {
         console.error(
           "WAN 2.2 GENERATION ERROR EVENT:",
           safeLogData(
@@ -890,13 +786,23 @@ export async function GET(request) {
           )
         );
 
-        // data: null or empty → treat as still running
+        /*
+         * Some queue responses can expose an empty/null
+         * error event while the actual job is still being
+         * processed.
+         *
+         * We therefore keep polling when the error carries
+         * no actual error information.
+         */
+
         if (
           event.data === null ||
           event.data === undefined ||
           event.data === "" ||
-          (typeof event.data === "object" &&
-            Object.keys(event.data).length === 0)
+          (
+            typeof event.data === "object" &&
+            Object.keys(event.data).length === 0
+          )
         ) {
           console.log(
             "WAN 2.2 NULL ERROR — TREATING AS STILL RUNNING:",
@@ -907,8 +813,7 @@ export async function GET(request) {
             success: true,
             status: "running",
             videoUrl: null,
-            predictionId:
-              eventId,
+            predictionId: eventId,
             message:
               "Wan 2.2 is still generating your video.",
           });
@@ -918,8 +823,7 @@ export async function GET(request) {
           "Wan 2.2 video generation failed.";
 
         if (
-          typeof event.data ===
-          "string"
+          typeof event.data === "string"
         ) {
           errorMessage =
             event.data;
@@ -938,10 +842,8 @@ export async function GET(request) {
           {
             success: false,
             status: "failed",
-            predictionId:
-              eventId,
-            error:
-              errorMessage,
+            predictionId: eventId,
+            error: errorMessage,
           },
           {
             status: 500,
@@ -952,25 +854,23 @@ export async function GET(request) {
 
     /*
      * No complete/error event yet.
-     * That means the generation is still running.
      */
+
     return NextResponse.json({
       success: true,
       status: "running",
       videoUrl: null,
-      predictionId:
-        eventId,
+      predictionId: eventId,
       message:
         "Wan 2.2 is still generating your video.",
     });
   } catch (error) {
     /*
-     * Timeout is NOT a generation failure.
-     * The frontend will poll again.
+     * Timeout is not a generation failure.
      */
+
     if (
-      error?.name ===
-      "AbortError"
+      error?.name === "AbortError"
     ) {
       console.log(
         "WAN 2.2 STATUS TIMEOUT — STILL RUNNING:",
@@ -981,8 +881,7 @@ export async function GET(request) {
         success: true,
         status: "running",
         videoUrl: null,
-        predictionId:
-          eventId,
+        predictionId: eventId,
         message:
           "Wan 2.2 is still generating your video.",
       });
@@ -993,17 +892,11 @@ export async function GET(request) {
       error
     );
 
-    /*
-     * IMPORTANT:
-     * Return the real error to the frontend,
-     * but keep the error message useful.
-     */
     return NextResponse.json(
       {
         success: false,
         status: "failed",
-        predictionId:
-          eventId,
+        predictionId: eventId,
         error:
           error?.message ||
           "Unexpected error while checking Wan 2.2 video status.",
