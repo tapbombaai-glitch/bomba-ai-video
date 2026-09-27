@@ -18,15 +18,7 @@ bad anatomy, low quality, watermark, text, logo, cartoon, anime,
 illustration, unrealistic movement, flickering, duplicate person
 `.trim();
 
-/* =========================================================
-   IMAGE PREPARATION
-========================================================= */
-
 function getImageData(image) {
-  if (!image || typeof image !== "string") {
-    return null;
-  }
-
   return {
     path: null,
     url: image,
@@ -42,19 +34,12 @@ function getImageData(image) {
   };
 }
 
-/* =========================================================
-   WAN FILE URL
-========================================================= */
-
 function makeWanFileUrl(value) {
-  if (!value || typeof value !== "string") {
-    return null;
-  }
+  if (!value) return null;
 
-  if (
-    value.startsWith("http://") ||
-    value.startsWith("https://")
-  ) {
+  if (typeof value !== "string") return null;
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
     return value;
   }
 
@@ -66,31 +51,20 @@ function makeWanFileUrl(value) {
     return `${WAN_API_BASE}/${value}`;
   }
 
-  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(
-    value
-  )}`;
+  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(value)}`;
 }
 
-/* =========================================================
-   VIDEO URL EXTRACTION
-========================================================= */
-
 function extractVideoUrl(value) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
 
   if (typeof value === "string") {
-    if (
-      value.startsWith("http://") ||
-      value.startsWith("https://")
-    ) {
-      return value;
-    }
+    const lower = value.toLowerCase();
 
     if (
-      value.startsWith("/file=") ||
-      value.startsWith("file=")
+      lower.includes(".mp4") ||
+      lower.includes("video") ||
+      lower.includes("/file=") ||
+      lower.includes("gradio_api/file")
     ) {
       return makeWanFileUrl(value);
     }
@@ -98,60 +72,17 @@ function extractVideoUrl(value) {
     return null;
   }
 
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractVideoUrl(item);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
   if (typeof value === "object") {
-    if (value.url) {
-      const url = makeWanFileUrl(value.url);
-
-      if (url) {
-        return url;
-      }
-    }
-
-    if (value.path) {
-      const url = makeWanFileUrl(value.path);
-
-      if (url) {
-        return url;
-      }
-    }
-
-    if (value.data) {
-      const nested = extractVideoUrl(value.data);
-
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-
-  return null;
-}
-
-function findVideoInResult(result) {
-  if (!result) {
-    return null;
-  }
-
-  const direct = extractVideoUrl(result);
-
-  if (direct) {
-    return direct;
-  }
-
-  if (Array.isArray(result)) {
-    for (const item of result) {
-      const found = findVideoInResult(item);
-
-      if (found) {
-        return found;
-      }
-    }
-
-    return null;
-  }
-
-  if (typeof result === "object") {
-    const keys = [
+    const priorityKeys = [
       "output",
       "output_1",
       "output_2",
@@ -165,41 +96,28 @@ function findVideoInResult(result) {
       "results",
     ];
 
-    for (const key of keys) {
-      if (
-        Object.prototype.hasOwnProperty.call(
-          result,
-          key
-        )
-      ) {
-        const found = findVideoInResult(
-          result[key]
-        );
-
-        if (found) {
-          return found;
-        }
+    for (const key of priorityKeys) {
+      if (value[key]) {
+        const found = extractVideoUrl(value[key]);
+        if (found) return found;
       }
+    }
+
+    for (const key of Object.keys(value)) {
+      const found = extractVideoUrl(value[key]);
+      if (found) return found;
     }
   }
 
   return null;
 }
 
-/* =========================================================
-   JSON HELPERS
-========================================================= */
-
 function parsePossibleJson(value) {
-  if (typeof value !== "string") {
-    return value;
-  }
+  if (typeof value !== "string") return value;
 
   const trimmed = value.trim();
 
-  if (!trimmed) {
-    return value;
-  }
+  if (!trimmed) return null;
 
   try {
     return JSON.parse(trimmed);
@@ -208,114 +126,217 @@ function parsePossibleJson(value) {
   }
 }
 
-/* =========================================================
-   SSE PARSER
-========================================================= */
-
 function parseSSE(text) {
   const events = [];
 
-  if (!text || typeof text !== "string") {
-    return events;
-  }
-
-  const blocks = text.split(/\r?\n\r?\n/);
+  const blocks = text.split(/\n\n+/);
 
   for (const block of blocks) {
-    if (!block.trim()) {
-      continue;
-    }
+    const lines = block.split("\n");
 
-    let eventName = "";
-    const dataLines = [];
-
-    const lines = block.split(/\r?\n/);
+    let event = null;
+    let data = "";
 
     for (const line of lines) {
       if (line.startsWith("event:")) {
-        eventName = line
-          .substring(6)
-          .trim();
+        event = line.substring(6).trim();
       }
 
       if (line.startsWith("data:")) {
-        dataLines.push(
-          line.substring(5).trim()
-        );
+        data += line.substring(5).trim();
       }
     }
 
-    if (dataLines.length === 0) {
-      continue;
+    if (event || data) {
+      events.push({
+        event,
+        data: parsePossibleJson(data),
+      });
     }
-
-    const dataText = dataLines.join("\n");
-
-    let data = parsePossibleJson(dataText);
-
-    if (typeof data === "string") {
-      const second = parsePossibleJson(data);
-
-      if (second !== data) {
-        data = second;
-      }
-    }
-
-    events.push({
-      event: eventName,
-      data,
-    });
   }
 
   return events;
 }
 
-/* =========================================================
-   SAFE LOGGING
-========================================================= */
-
-function safeLogData(data) {
+function safeLogData(value) {
   try {
-    const text = JSON.stringify(data);
+    const text = JSON.stringify(value);
 
-    if (text.length > 3500) {
-      return (
-        text.substring(0, 3500) +
-        "...[truncated]"
-      );
+    if (text.length > 3000) {
+      return text.substring(0, 3000) + "...";
     }
 
     return text;
   } catch {
-    return String(data);
+    return String(value);
   }
 }
 
-/* =========================================================
-   POST
-   START WAN GENERATION
-========================================================= */
+async function proxyVideo(requestUrl) {
+  const encodedVideoUrl =
+    requestUrl.searchParams.get("videoUrl");
+
+  if (!encodedVideoUrl) {
+    return null;
+  }
+
+  let videoUrl;
+
+  try {
+    videoUrl = decodeURIComponent(encodedVideoUrl);
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid video URL.",
+      },
+      { status: 400 }
+    );
+  }
+
+  let remoteUrl;
+
+  try {
+    remoteUrl = new URL(videoUrl);
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid video URL.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const allowedHost =
+    "observantdistressed-wan2-2-i2v-v3.hf.space";
+
+  if (remoteUrl.hostname !== allowedHost) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Video source is not allowed.",
+      },
+      { status: 403 }
+    );
+  }
+
+  console.log(
+    "BOMBA VIDEO PROXY:",
+    remoteUrl.toString()
+  );
+
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 50000);
+
+  try {
+    const response = await fetch(
+      remoteUrl.toString(),
+      {
+        method: "GET",
+        headers: {
+          Accept: "video/mp4,video/*,*/*",
+        },
+        signal: controller.signal,
+      }
+    );
+
+    console.log(
+      "BOMBA VIDEO PROXY STATUS:",
+      response.status,
+      response.headers.get("content-type"),
+      response.headers.get("content-length")
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(
+        "BOMBA VIDEO PROXY ERROR:",
+        errorText.substring(0, 1000)
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Unable to retrieve generated video. Status ${response.status}.`,
+        },
+        { status: 502 }
+      );
+    }
+
+    const headers = new Headers();
+
+    headers.set(
+      "Content-Type",
+      response.headers.get("content-type") ||
+        "video/mp4"
+    );
+
+    headers.set(
+      "Cache-Control",
+      "public, max-age=3600"
+    );
+
+    headers.set(
+      "Accept-Ranges",
+      "bytes"
+    );
+
+    const contentLength =
+      response.headers.get("content-length");
+
+    if (contentLength) {
+      headers.set(
+        "Content-Length",
+        contentLength
+      );
+    }
+
+    return new Response(
+      response.body,
+      {
+        status: 200,
+        headers,
+      }
+    );
+  } catch (error) {
+    console.error(
+      "BOMBA VIDEO PROXY FETCH ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "BOMBA could not retrieve the generated video.",
+      },
+      { status: 502 }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function POST(request) {
   try {
     const body = await request.json();
 
-    const mode =
-      body?.mode || "Movie";
-
-    const prompt =
-      body?.prompt?.trim();
-
-    const characterImage =
-      body?.characterImage || null;
+    const {
+      mode,
+      prompt,
+      characterImage,
+    } = body || {};
 
     if (!prompt) {
       return NextResponse.json(
         {
           success: false,
-          status: "failed",
-          error:
-            "Please describe your video first.",
+          error: "Please enter a video prompt.",
         },
         { status: 400 }
       );
@@ -325,24 +346,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          status: "failed",
-          error:
-            "Please upload a picture first.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const imageData =
-      getImageData(characterImage);
-
-    if (!imageData) {
-      return NextResponse.json(
-        {
-          success: false,
-          status: "failed",
-          error:
-            "The uploaded image could not be prepared.",
+          error: "Please upload a character image.",
         },
         { status: 400 }
       );
@@ -351,7 +355,7 @@ export async function POST(request) {
     const finalPrompt = `
 Create a realistic live-action video from the supplied image.
 
-Mode: ${mode}
+Mode: ${mode || "Movie"}
 
 Scene description:
 ${prompt}
@@ -377,6 +381,9 @@ Do not use illustration style.
 Do not use 3D cartoon style.
 `.trim();
 
+    const imageData =
+      getImageData(characterImage);
+
     const data = [
       imageData,
       imageData,
@@ -399,14 +406,7 @@ Do not use 3D cartoon style.
     ];
 
     console.log(
-      "BOMBA WAN 2.2 REQUEST:",
-      {
-        mode,
-        duration: 4,
-        steps: 6,
-        quality: 6,
-        hasImage: true,
-      }
+      "BOMBA WAN 2.2 STARTING"
     );
 
     const response = await fetch(
@@ -420,98 +420,70 @@ Do not use 3D cartoon style.
         body: JSON.stringify({
           data,
         }),
-        cache: "no-store",
       }
     );
 
     const responseText =
       await response.text();
 
-    console.log(
-      "WAN 2.2 CREATE STATUS:",
-      response.status
-    );
-
     if (!response.ok) {
       console.error(
-        "WAN 2.2 CREATE ERROR:",
-        responseText
+        "BOMBA WAN START ERROR:",
+        response.status,
+        responseText.substring(0, 3000)
       );
-
-      let errorMessage =
-        "Wan 2.2 could not start the video.";
-
-      try {
-        const errorData =
-          JSON.parse(responseText);
-
-        errorMessage =
-          errorData?.error ||
-          errorData?.message ||
-          errorMessage;
-      } catch {
-        if (responseText) {
-          errorMessage =
-            responseText.substring(
-              0,
-              800
-            );
-        }
-      }
 
       return NextResponse.json(
         {
           success: false,
-          status: "failed",
-          error: errorMessage,
+          error:
+            "Wan 2.2 could not start the video generation.",
         },
-        {
-          status:
-            response.status || 500,
-        }
+        { status: 502 }
       );
     }
 
-    let result = null;
+    let result;
 
     try {
       result =
         JSON.parse(responseText);
     } catch {
-      result = null;
+      console.error(
+        "BOMBA WAN INVALID START RESPONSE:",
+        responseText.substring(0, 3000)
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Wan 2.2 returned an unexpected response.",
+        },
+        { status: 502 }
+      );
     }
 
     console.log(
-      "WAN 2.2 CREATE RESPONSE:",
+      "BOMBA WAN START RESPONSE:",
       safeLogData(result)
     );
 
     const eventId =
       result?.event_id ||
       result?.eventId ||
-      null;
+      result?.id;
 
     if (!eventId) {
-      console.error(
-        "WAN 2.2 NO EVENT ID:",
-        responseText
-      );
-
       return NextResponse.json(
         {
           success: false,
-          status: "failed",
           error:
-            "Wan 2.2 accepted the request but returned no generation ID.",
+            "Wan 2.2 did not return a generation ID.",
         },
-        { status: 500 }
+        { status: 502 }
       );
     }
-
-    console.log(
-      "WAN 2.2 EVENT CREATED:",
-      eventId
-    );
 
     return NextResponse.json({
       success: true,
@@ -523,31 +495,43 @@ Do not use 3D cartoon style.
     });
   } catch (error) {
     console.error(
-      "BOMBA WAN 2.2 POST ERROR:",
+      "BOMBA WAN POST ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         success: false,
-        status: "failed",
         error:
           error?.message ||
-          "Unexpected error while starting Wan 2.2 video generation.",
+          "Unable to start video generation.",
       },
       { status: 500 }
     );
   }
 }
 
-/* =========================================================
-   GET
-   CHECK WAN GENERATION STATUS
-========================================================= */
-
 export async function GET(request) {
   const requestUrl =
     new URL(request.url);
+
+  /*
+   * VIDEO PROXY
+   *
+   * Browser requests:
+   *
+   * /api/video/generate?videoUrl=...
+   *
+   * BOMBA downloads the temporary Hugging Face
+   * video and streams it back to the browser.
+   */
+  if (
+    requestUrl.searchParams.has(
+      "videoUrl"
+    )
+  ) {
+    return proxyVideo(requestUrl);
+  }
 
   const eventId =
     requestUrl.searchParams.get(
@@ -561,323 +545,203 @@ export async function GET(request) {
     return NextResponse.json(
       {
         success: false,
-        status: "failed",
         error:
-          "predictionId or jobId is required.",
+          "Missing predictionId or jobId.",
       },
       { status: 400 }
     );
   }
 
+  const resultUrl =
+    `${WAN_RESULT_BASE}/${encodeURIComponent(
+      eventId
+    )}`;
+
   console.log(
-    "WAN 2.2 STATUS CHECK:",
+    "BOMBA WAN 2.2 STATUS CHECK:",
     eventId
   );
 
   try {
-    const controller =
-      new AbortController();
-
-    const timeout =
-      setTimeout(() => {
-        controller.abort();
-      }, 28000);
-
-    let response;
-
-    try {
-      /*
-       * IMPORTANT:
-       * This MUST remain normal JavaScript
-       * template-literal syntax.
-       */
-      const resultUrl =
-        `${WAN_RESULT_BASE}/${encodeURIComponent(eventId)}`;
-
-      console.log(
-        "WAN 2.2 RESULT URL:",
-        resultUrl
-      );
-
-      response = await fetch(
-        resultUrl,
-        {
-          method: "GET",
-          headers: {
-            Accept:
-              "text/event-stream",
-            "Cache-Control":
-              "no-cache",
-          },
-          signal:
-            controller.signal,
-          cache: "no-store",
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    console.log(
-      "WAN 2.2 STATUS HTTP:",
-      response.status,
-      eventId
+    const response = await fetch(
+      resultUrl,
+      {
+        method: "GET",
+        headers: {
+          Accept:
+            "text/event-stream",
+        },
+        cache: "no-store",
+      }
     );
-
-    if (!response.ok) {
-      const errorText =
-        await response.text();
-
-      console.error(
-        "WAN 2.2 STATUS ERROR:",
-        response.status,
-        errorText
-      );
-
-      return NextResponse.json({
-        success: true,
-        status: "running",
-        videoUrl: null,
-        predictionId: eventId,
-        message:
-          "Wan 2.2 is still processing the video.",
-      });
-    }
 
     const text =
       await response.text();
 
-    console.log(
-      "WAN 2.2 SSE RESPONSE LENGTH:",
-      text.length,
-      eventId
-    );
+    if (!response.ok) {
+      console.error(
+        "BOMBA WAN STATUS ERROR:",
+        response.status,
+        text.substring(0, 3000)
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          status: "error",
+          error:
+            "Unable to check Wan 2.2 generation status.",
+        },
+        { status: 502 }
+      );
+    }
 
     const events =
       parseSSE(text);
 
-    console.log(
-      "WAN 2.2 EVENTS:",
-      events.map(
-        (event) => event.event
-      ),
-      eventId
-    );
+    let latestStatus =
+      "processing";
 
-    /* =====================================================
-       CHECK EVENTS — NEWEST FIRST
-    ===================================================== */
+    let videoUrl = null;
 
-    for (
-      let i = events.length - 1;
-      i >= 0;
-      i--
-    ) {
-      const event =
-        events[i];
+    let rawCompleteData =
+      null;
 
+    for (const item of events) {
       const eventName =
-        String(
-          event.event || ""
-        ).toLowerCase();
+        item.event || "";
 
-      /* ===================================================
-         COMPLETE
-      =================================================== */
+      const data =
+        item.data;
 
       if (
-        eventName === "complete" ||
-        eventName === "completed"
+        eventName === "generating" ||
+        eventName === "pending"
       ) {
-        console.log(
-          "WAN 2.2 COMPLETE:",
-          safeLogData(
-            event.data
-          )
-        );
-
-        let videoUrl =
-          findVideoInResult(
-            event.data
-          );
-
-        if (!videoUrl) {
-          const parsed =
-            parsePossibleJson(
-              event.data
-            );
-
-          videoUrl =
-            findVideoInResult(
-              parsed
-            );
-        }
-
-        if (!videoUrl) {
-          console.error(
-            "WAN 2.2 COMPLETE BUT NO VIDEO:",
-            safeLogData(
-              event.data
-            )
-          );
-
-          return NextResponse.json(
-            {
-              success: false,
-              status: "failed",
-              predictionId:
-                eventId,
-              error:
-                "Wan 2.2 finished but returned no video file.",
-            },
-            { status: 500 }
-          );
-        }
-
-        console.log(
-          "WAN 2.2 VIDEO READY:",
-          videoUrl
-        );
-
-        return NextResponse.json({
-          success: true,
-          status: "succeeded",
-          videoUrl,
-          predictionId: eventId,
-          message:
-            "Video is ready.",
-        });
+        latestStatus =
+          "processing";
       }
 
-      /* ===================================================
-         ERROR
-      =================================================== */
+      if (
+        eventName === "complete"
+      ) {
+        latestStatus =
+          "succeeded";
+
+        rawCompleteData =
+          data;
+
+        videoUrl =
+          extractVideoUrl(data);
+      }
 
       if (
         eventName === "error"
       ) {
+        latestStatus =
+          "failed";
+
         console.error(
-          "WAN 2.2 ERROR EVENT:",
-          safeLogData(
-            event.data
-          )
-        );
-
-        if (
-          event.data === null ||
-          event.data === undefined ||
-          event.data === "" ||
-          (
-            typeof event.data ===
-              "object" &&
-            Object.keys(
-              event.data
-            ).length === 0
-          )
-        ) {
-          console.log(
-            "WAN 2.2 EMPTY ERROR — KEEP POLLING:",
-            eventId
-          );
-
-          return NextResponse.json({
-            success: true,
-            status: "running",
-            videoUrl: null,
-            predictionId:
-              eventId,
-            message:
-              "Wan 2.2 is still generating your video.",
-          });
-        }
-
-        let errorMessage =
-          "Wan 2.2 video generation failed.";
-
-        if (
-          typeof event.data ===
-          "string"
-        ) {
-          errorMessage =
-            event.data;
-        } else if (
-          event.data &&
-          typeof event.data ===
-            "object"
-        ) {
-          errorMessage =
-            event.data.error ||
-            event.data.message ||
-            errorMessage;
-        }
-
-        return NextResponse.json(
-          {
-            success: false,
-            status: "failed",
-            predictionId:
-              eventId,
-            error:
-              errorMessage,
-          },
-          { status: 500 }
+          "BOMBA WAN GENERATION ERROR:",
+          safeLogData(data)
         );
       }
     }
 
-    /* =====================================================
-       STILL RUNNING
-    ===================================================== */
-
-    return NextResponse.json({
-      success: true,
-      status: "running",
-      videoUrl: null,
-      predictionId: eventId,
-      message:
-        "Wan 2.2 is still generating your video.",
-    });
-  } catch (error) {
-    /* =====================================================
-       TIMEOUT DOES NOT MEAN WAN FAILED
-    ===================================================== */
+    /*
+     * Some Gradio responses may contain the
+     * result without using exactly the expected
+     * event name, so search the complete payload
+     * as a fallback.
+     */
+    if (
+      !videoUrl &&
+      rawCompleteData
+    ) {
+      videoUrl =
+        extractVideoUrl(
+          rawCompleteData
+        );
+    }
 
     if (
-      error?.name ===
-      "AbortError"
+      latestStatus ===
+        "succeeded" &&
+      videoUrl
     ) {
       console.log(
-        "WAN 2.2 STATUS TIMEOUT — KEEP POLLING:",
-        eventId
+        "WAN 2.2 ORIGINAL VIDEO:",
+        videoUrl
+      );
+
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT send the temporary Hugging Face
+       * URL directly to the browser.
+       *
+       * Send the browser through BOMBA's proxy.
+       */
+      const proxyUrl =
+        `${requestUrl.origin}/api/video/generate?videoUrl=${encodeURIComponent(
+          videoUrl
+        )}`;
+
+      console.log(
+        "BOMBA PROXY VIDEO URL:",
+        proxyUrl
       );
 
       return NextResponse.json({
         success: true,
-        status: "running",
-        videoUrl: null,
-        predictionId: eventId,
+        status: "succeeded",
+        videoUrl: proxyUrl,
+        predictionId:
+          eventId,
         message:
-          "Wan 2.2 is still generating your video.",
+          "Video is ready.",
       });
     }
 
-    console.error(
-      "BOMBA WAN 2.2 GET ERROR:",
-      error
-    );
-
-    /*
-     * Soft-fail so the frontend can
-     * continue polling the same job.
-     */
+    if (
+      latestStatus ===
+      "failed"
+    ) {
+      return NextResponse.json({
+        success: false,
+        status: "failed",
+        predictionId:
+          eventId,
+        error:
+          "Wan 2.2 video generation failed.",
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      status: "running",
-      videoUrl: null,
-      predictionId: eventId,
+      status: "processing",
+      predictionId:
+        eventId,
       message:
-        "Wan 2.2 is still generating your video.",
+        "Video is still being generated.",
     });
+  } catch (error) {
+    console.error(
+      "BOMBA WAN STATUS FETCH ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        status: "error",
+        predictionId:
+          eventId,
+        error:
+          error?.message ||
+          "Unable to check video status.",
+      },
+      { status: 500 }
+    );
   }
 }
