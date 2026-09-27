@@ -39,7 +39,10 @@ function makeWanFileUrl(value) {
 
   if (typeof value !== "string") return null;
 
-  if (value.startsWith("http://") || value.startsWith("https://")) {
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://")
+  ) {
     return value;
   }
 
@@ -51,7 +54,9 @@ function makeWanFileUrl(value) {
     return `${WAN_API_BASE}/${value}`;
   }
 
-  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(value)}`;
+  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(
+    value
+  )}`;
 }
 
 function extractVideoUrl(value) {
@@ -75,7 +80,10 @@ function extractVideoUrl(value) {
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = extractVideoUrl(item);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
 
     return null;
@@ -99,13 +107,19 @@ function extractVideoUrl(value) {
     for (const key of priorityKeys) {
       if (value[key]) {
         const found = extractVideoUrl(value[key]);
-        if (found) return found;
+
+        if (found) {
+          return found;
+        }
       }
     }
 
     for (const key of Object.keys(value)) {
       const found = extractVideoUrl(value[key]);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
   }
 
@@ -113,11 +127,15 @@ function extractVideoUrl(value) {
 }
 
 function parsePossibleJson(value) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string") {
+    return value;
+  }
 
   const trimmed = value.trim();
 
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
 
   try {
     return JSON.parse(trimmed);
@@ -183,7 +201,8 @@ async function proxyVideo(requestUrl) {
   let videoUrl;
 
   try {
-    videoUrl = decodeURIComponent(encodedVideoUrl);
+    videoUrl =
+      decodeURIComponent(encodedVideoUrl);
   } catch {
     return NextResponse.json(
       {
@@ -226,7 +245,8 @@ async function proxyVideo(requestUrl) {
     remoteUrl.toString()
   );
 
-  const controller = new AbortController();
+  const controller =
+    new AbortController();
 
   const timeout = setTimeout(() => {
     controller.abort();
@@ -238,7 +258,8 @@ async function proxyVideo(requestUrl) {
       {
         method: "GET",
         headers: {
-          Accept: "video/mp4,video/*,*/*",
+          Accept:
+            "video/mp4,video/*,*/*",
         },
         signal: controller.signal,
       }
@@ -252,7 +273,8 @@ async function proxyVideo(requestUrl) {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText =
+        await response.text();
 
       console.error(
         "BOMBA VIDEO PROXY ERROR:",
@@ -262,18 +284,21 @@ async function proxyVideo(requestUrl) {
       return NextResponse.json(
         {
           success: false,
-          error: `Unable to retrieve generated video. Status ${response.status}.`,
+          error:
+            `Unable to retrieve generated video. Status ${response.status}.`,
         },
         { status: 502 }
       );
     }
 
-    const headers = new Headers();
+    const headers =
+      new Headers();
 
     headers.set(
       "Content-Type",
-      response.headers.get("content-type") ||
-        "video/mp4"
+      response.headers.get(
+        "content-type"
+      ) || "video/mp4"
     );
 
     headers.set(
@@ -287,7 +312,9 @@ async function proxyVideo(requestUrl) {
     );
 
     const contentLength =
-      response.headers.get("content-length");
+      response.headers.get(
+        "content-length"
+      );
 
     if (contentLength) {
       headers.set(
@@ -324,7 +351,8 @@ async function proxyVideo(requestUrl) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    const body =
+      await request.json();
 
     const {
       mode,
@@ -336,7 +364,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Please enter a video prompt.",
+          error:
+            "Please enter a video prompt.",
         },
         { status: 400 }
       );
@@ -346,7 +375,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Please upload a character image.",
+          error:
+            "Please upload a character image.",
         },
         { status: 400 }
       );
@@ -382,7 +412,9 @@ Do not use 3D cartoon style.
 `.trim();
 
     const imageData =
-      getImageData(characterImage);
+      getImageData(
+        characterImage
+      );
 
     const data = [
       imageData,
@@ -390,7 +422,10 @@ Do not use 3D cartoon style.
       finalPrompt,
       6,
       DEFAULT_NEGATIVE_PROMPT,
-      4,
+
+      // 10 SECOND VIDEO
+      10,
+
       1,
       1,
       0,
@@ -409,19 +444,20 @@ Do not use 3D cartoon style.
       "BOMBA WAN 2.2 STARTING"
     );
 
-    const response = await fetch(
-      WAN_CALL_URL,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          data,
-        }),
-      }
-    );
+    const response =
+      await fetch(
+        WAN_CALL_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            data,
+          }),
+        }
+      );
 
     const responseText =
       await response.text();
@@ -430,7 +466,10 @@ Do not use 3D cartoon style.
       console.error(
         "BOMBA WAN START ERROR:",
         response.status,
-        responseText.substring(0, 3000)
+        responseText.substring(
+          0,
+          3000
+        )
       );
 
       return NextResponse.json(
@@ -447,11 +486,16 @@ Do not use 3D cartoon style.
 
     try {
       result =
-        JSON.parse(responseText);
+        JSON.parse(
+          responseText
+        );
     } catch {
       console.error(
         "BOMBA WAN INVALID START RESPONSE:",
-        responseText.substring(0, 3000)
+        responseText.substring(
+          0,
+          3000
+        )
       );
 
       return NextResponse.json(
@@ -515,22 +559,14 @@ export async function GET(request) {
   const requestUrl =
     new URL(request.url);
 
-  /*
-   * VIDEO PROXY
-   *
-   * Browser requests:
-   *
-   * /api/video/generate?videoUrl=...
-   *
-   * BOMBA downloads the temporary Hugging Face
-   * video and streams it back to the browser.
-   */
   if (
     requestUrl.searchParams.has(
       "videoUrl"
     )
   ) {
-    return proxyVideo(requestUrl);
+    return proxyVideo(
+      requestUrl
+    );
   }
 
   const eventId =
@@ -563,17 +599,18 @@ export async function GET(request) {
   );
 
   try {
-    const response = await fetch(
-      resultUrl,
-      {
-        method: "GET",
-        headers: {
-          Accept:
-            "text/event-stream",
-        },
-        cache: "no-store",
-      }
-    );
+    const response =
+      await fetch(
+        resultUrl,
+        {
+          method: "GET",
+          headers: {
+            Accept:
+              "text/event-stream",
+          },
+          cache: "no-store",
+        }
+      );
 
     const text =
       await response.text();
@@ -582,7 +619,10 @@ export async function GET(request) {
       console.error(
         "BOMBA WAN STATUS ERROR:",
         response.status,
-        text.substring(0, 3000)
+        text.substring(
+          0,
+          3000
+        )
       );
 
       return NextResponse.json(
@@ -615,7 +655,8 @@ export async function GET(request) {
         item.data;
 
       if (
-        eventName === "generating" ||
+        eventName ===
+          "generating" ||
         eventName === "pending"
       ) {
         latestStatus =
@@ -623,7 +664,8 @@ export async function GET(request) {
       }
 
       if (
-        eventName === "complete"
+        eventName ===
+        "complete"
       ) {
         latestStatus =
           "succeeded";
@@ -632,7 +674,9 @@ export async function GET(request) {
           data;
 
         videoUrl =
-          extractVideoUrl(data);
+          extractVideoUrl(
+            data
+          );
       }
 
       if (
@@ -648,12 +692,6 @@ export async function GET(request) {
       }
     }
 
-    /*
-     * Some Gradio responses may contain the
-     * result without using exactly the expected
-     * event name, so search the complete payload
-     * as a fallback.
-     */
     if (
       !videoUrl &&
       rawCompleteData
@@ -674,14 +712,6 @@ export async function GET(request) {
         videoUrl
       );
 
-      /*
-       * IMPORTANT:
-       *
-       * Do NOT send the temporary Hugging Face
-       * URL directly to the browser.
-       *
-       * Send the browser through BOMBA's proxy.
-       */
       const proxyUrl =
         `${requestUrl.origin}/api/video/generate?videoUrl=${encodeURIComponent(
           videoUrl
@@ -695,7 +725,8 @@ export async function GET(request) {
       return NextResponse.json({
         success: true,
         status: "succeeded",
-        videoUrl: proxyUrl,
+        videoUrl:
+          proxyUrl,
         predictionId:
           eventId,
         message:
