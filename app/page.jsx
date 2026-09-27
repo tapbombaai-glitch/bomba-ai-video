@@ -35,7 +35,8 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (pollingRef.current) {
-        clearInterval(pollingRef.current);
+        pollingRef.current.cancelled = true;
+        pollingRef.current = null;
       }
     };
   }, []);
@@ -113,38 +114,74 @@ export default function Home() {
   };
 
   /* =====================================================
-     STOP POLLING
+     STOP VIDEO CHECKING
   ===================================================== */
 
   const stopPolling = () => {
     if (pollingRef.current) {
-      clearInterval(pollingRef.current);
+      pollingRef.current.cancelled = true;
       pollingRef.current = null;
     }
   };
 
   /* =====================================================
-     POLL VIDEO
+     WAIT
   ===================================================== */
 
-  const pollVideo = (predictionId) => {
-    let attempts = 0;
+  const wait = (milliseconds) => {
+    return new Promise((resolve) => {
+      setTimeout(resolve, milliseconds);
+    });
+  };
 
-    /*
-      5 seconds x 120 attempts = 10 minutes.
+  /* =====================================================
+     CHECK VIDEO
+     
+     IMPORTANT:
+     This is now SEQUENTIAL.
+     
+     We wait for one request to finish before starting
+     another request. This prevents multiple GET requests
+     from hitting the same Wan SSE event at the same time.
+  ===================================================== */
 
-      This is deliberately longer than the old
-      300-second frontend cutoff.
-    */
-
-    const maxAttempts = 120;
+  const pollVideo = async (predictionId) => {
+    const controller = {
+      cancelled: false,
+    };
 
     stopPolling();
 
-    pollingRef.current = setInterval(async () => {
-      attempts++;
+    pollingRef.current = controller;
+
+    const maxAttempts = 12;
+
+    for (let attempts = 1; attempts <= maxAttempts; attempts++) {
+      if (controller.cancelled) {
+        return;
+      }
 
       try {
+        const elapsedMinutes = Math.round(
+          ((attempts - 1) * 55) / 60
+        );
+
+        if (attempts === 1) {
+          setStatus(
+            "Connecting to Wan 2.2... 🎬"
+          );
+        } else {
+          setStatus(
+            `Wan 2.2 is still generating your video... ${elapsedMinutes} min`
+          );
+        }
+
+        console.log(
+          "BOMBA WAN STATUS CHECK:",
+          attempts,
+          predictionId
+        );
+
         const res = await fetch(
           `/api/video/generate?predictionId=${encodeURIComponent(
             predictionId
@@ -158,11 +195,9 @@ export default function Home() {
           }
         );
 
-        /*
-          IMPORTANT:
-          Never blindly call res.json().
-          The server may return plain text on an error.
-        */
+        if (controller.cancelled) {
+          return;
+        }
 
         let data;
 
@@ -175,18 +210,17 @@ export default function Home() {
           );
 
           /*
-            A temporary non-JSON response should not
-            immediately destroy the generation job.
+            If the server returned something unexpected,
+            wait and make another sequential attempt.
           */
 
           if (attempts < maxAttempts) {
-            const seconds = attempts * 5;
-
             setStatus(
-              `Video is still being generated... ${seconds}s`
+              "Wan 2.2 is processing the video... reconnecting..."
             );
 
-            return;
+            await wait(3000);
+            continue;
           }
 
           throw parseError;
@@ -197,28 +231,26 @@ export default function Home() {
           data
         );
 
-        if (!res.ok) {
-          throw new Error(
-            data?.error ||
-              data?.message ||
-              "Unable to check video status."
-          );
-        }
-
         /* ===============================================
            VIDEO READY
+           
+           IMPORTANT:
+           route.js returns "completed", not "succeeded".
         =============================================== */
 
         if (
-          data?.status === "succeeded" &&
+          res.ok &&
+          data?.status === "completed" &&
           data?.videoUrl
         ) {
-          stopPolling();
-
           console.log(
-            "BOMBA VIDEO URL:",
+            "BOMBA VIDEO READY:",
             data.videoUrl
           );
+
+          if (pollingRef.current === controller) {
+            pollingRef.current = null;
+          }
 
           setVideoUrl(data.videoUrl);
           setStatus("Video ready! 🎬");
@@ -229,82 +261,139 @@ export default function Home() {
         }
 
         /* ===============================================
-           FAILED
+           STILL PROCESSING
+           
+           route.js normally returns HTTP 202 here.
+        =============================================== */
+
+        if (
+          data?.status === "processing" ||
+          res.status === 202
+        ) {
+          if (attempts < maxAttempts) {
+            setStatus(
+              "Wan 2.2 is still generating your video... please wait 🎬"
+            );
+
+            /*
+              IMPORTANT:
+              Wait only AFTER the previous request has
+              completely finished.
+            */
+
+            await wait(3000);
+            continue;
+          }
+
+          throw new Error(
+            "The video is taking longer than expected. Wan 2.2 may still be generating it."
+          );
+        }
+
+        /* ===============================================
+           GENERATION FAILED
         =============================================== */
 
         if (
           data?.status === "failed" ||
           data?.status === "canceled"
         ) {
-          stopPolling();
-
-          setError(
+          throw new Error(
             data?.error ||
-              "Video generation failed."
+              "Wan 2.2 video generation failed."
           );
-
-          setStatus("");
-          setLoading(false);
-
-          return;
         }
 
         /* ===============================================
-           STILL RUNNING
+           HTTP ERROR
         =============================================== */
 
-        const seconds = attempts * 5;
+        if (!res.ok) {
+          /*
+            A 410 means the Wan event is no longer available.
+            Do not keep hammering the same expired event.
+          */
 
-        setStatus(
-          `Video is still being generated... ${seconds}s`
+          if (res.status === 410) {
+            throw new Error(
+              data?.error ||
+                "The Wan 2.2 generation event expired or is no longer available."
+            );
+          }
+
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              `Unable to check video status (${res.status}).`
+          );
+        }
+
+        /* ===============================================
+           UNKNOWN RESPONSE
+        =============================================== */
+
+        if (attempts < maxAttempts) {
+          setStatus(
+            "Wan 2.2 is processing your video... please wait."
+          );
+
+          await wait(3000);
+          continue;
+        }
+
+        throw new Error(
+          "Wan 2.2 did not return a final video result."
         );
-
-        /* ===============================================
-           FRONTEND MAX WAIT
-        =============================================== */
-
-        if (attempts >= maxAttempts) {
-          stopPolling();
-
-          setError(
-            "The video is taking longer than expected. The generation job may still be running. Please check again shortly."
-          );
-
-          setStatus("");
-          setLoading(false);
-        }
       } catch (err) {
         console.error(
-          "BOMBA VIDEO POLLING ERROR:",
+          "BOMBA VIDEO STATUS ERROR:",
           err
         );
 
-        /*
-          If the request itself failed, we give it a few
-          retries instead of immediately killing the job.
-        */
-
-        if (attempts < 5) {
-          const seconds = attempts * 5;
-
-          setStatus(
-            `Reconnecting to video generation... ${seconds}s`
-          );
-
+        if (controller.cancelled) {
           return;
         }
 
-        stopPolling();
+        /*
+          Give temporary connection problems another
+          sequential attempt.
+        */
+
+        if (attempts < maxAttempts) {
+          setStatus(
+            "Wan 2.2 is still working... reconnecting safely..."
+          );
+
+          await wait(3000);
+          continue;
+        }
+
+        if (pollingRef.current === controller) {
+          pollingRef.current = null;
+        }
 
         setError(
           err?.message ||
-            "Unable to check video generation status."
+            "Unable to retrieve the generated video."
         );
 
         setStatus("");
         setLoading(false);
+
+        return;
       }
-    }, 5000);
+    }
+
+    if (pollingRef.current === controller) {
+      pollingRef.current = null;
+    }
+
+    setError(
+      "The video is taking longer than expected. Please try again shortly."
+    );
+
+    setStatus("");
+    setLoading(false);
   };
 
   /* =====================================================
@@ -363,14 +452,6 @@ ${prompt}
         }
       );
 
-      /*
-        IMPORTANT:
-        Safely read the response.
-        This prevents:
-        "Unexpected token A"
-        "not valid JSON"
-      */
-
       let data;
 
       try {
@@ -404,22 +485,14 @@ ${prompt}
          VIDEO ALREADY AVAILABLE
       =============================================== */
 
-      if (
-        data?.videoUrl
-      ) {
+      if (data?.videoUrl) {
         console.log(
           "BOMBA DIRECT VIDEO URL:",
           data.videoUrl
         );
 
-        setVideoUrl(
-          data.videoUrl
-        );
-
-        setStatus(
-          "Video ready! 🎬"
-        );
-
+        setVideoUrl(data.videoUrl);
+        setStatus("Video ready! 🎬");
         setError("");
         setLoading(false);
 
@@ -432,11 +505,13 @@ ${prompt}
 
       if (
         data?.jobId ||
-        data?.predictionId
+        data?.predictionId ||
+        data?.eventId
       ) {
         const jobId =
           data.jobId ||
-          data.predictionId;
+          data.predictionId ||
+          data.eventId;
 
         console.log(
           "BOMBA WAN JOB:",
@@ -444,10 +519,16 @@ ${prompt}
         );
 
         setStatus(
-          "Video is being generated... please wait 🎬"
+          "Wan 2.2 has started generating your video... 🎬"
         );
 
-        pollVideo(jobId);
+        /*
+          IMPORTANT:
+          pollVideo is now sequential.
+          It does NOT use setInterval.
+        */
+
+        await pollVideo(jobId);
 
         return;
       }
