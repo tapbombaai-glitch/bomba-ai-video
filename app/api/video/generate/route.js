@@ -18,9 +18,9 @@ bad anatomy, low quality, watermark, text, logo, cartoon, anime,
 illustration, unrealistic movement, flickering, duplicate person
 `.trim();
 
-/* ---------------------------------------------------------
+/* =========================================================
    IMAGE PREPARATION
---------------------------------------------------------- */
+========================================================= */
 
 function getImageData(image) {
   if (!image || typeof image !== "string") {
@@ -42,9 +42,9 @@ function getImageData(image) {
   };
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
    WAN FILE URL
---------------------------------------------------------- */
+========================================================= */
 
 function makeWanFileUrl(value) {
   if (!value || typeof value !== "string") {
@@ -71,9 +71,9 @@ function makeWanFileUrl(value) {
   )}`;
 }
 
-/* ---------------------------------------------------------
-   VIDEO EXTRACTION
---------------------------------------------------------- */
+/* =========================================================
+   VIDEO URL EXTRACTION
+========================================================= */
 
 function extractVideoUrl(value) {
   if (!value) {
@@ -186,9 +186,9 @@ function findVideoInResult(result) {
   return null;
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
    JSON HELPERS
---------------------------------------------------------- */
+========================================================= */
 
 function parsePossibleJson(value) {
   if (typeof value !== "string") {
@@ -208,9 +208,9 @@ function parsePossibleJson(value) {
   }
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
    SSE PARSER
---------------------------------------------------------- */
+========================================================= */
 
 function parseSSE(text) {
   const events = [];
@@ -270,9 +270,9 @@ function parseSSE(text) {
   return events;
 }
 
-/* ---------------------------------------------------------
-   SAFE LOG
---------------------------------------------------------- */
+/* =========================================================
+   SAFE LOGGING
+========================================================= */
 
 function safeLogData(data) {
   try {
@@ -377,30 +377,25 @@ Do not use illustration style.
 Do not use 3D cartoon style.
 `.trim();
 
-    /*
-      IMPORTANT:
-      This order matches the public Space schema.
-    */
-
     const data = [
-      imageData,               // 1 input_image
-      imageData,               // 2 last_image
-      finalPrompt,             // 3 prompt
-      6,                       // 4 steps
-      DEFAULT_NEGATIVE_PROMPT, // 5 negative_prompt
-      4,                       // 6 duration_seconds
-      1,                       // 7 guidance_scale
-      1,                       // 8 guidance_scale_2
-      0,                       // 9 seed
-      true,                    // 10 randomize_seed
-      6,                       // 11 quality
-      "UniPCMultistep",        // 12 scheduler
-      3,                       // 13 flow_shift
-      16,                      // 14 frame_multiplier
-      true,                    // 15 safe_mode
-      [],                      // 16 lora_groups
-      false,                   // 17 auto_lora_enabled
-      true,                    // 18 video_component
+      imageData,
+      imageData,
+      finalPrompt,
+      6,
+      DEFAULT_NEGATIVE_PROMPT,
+      4,
+      1,
+      1,
+      0,
+      true,
+      6,
+      "UniPCMultistep",
+      3,
+      16,
+      true,
+      [],
+      false,
+      true,
     ];
 
     console.log(
@@ -591,10 +586,13 @@ export async function GET(request) {
     let response;
 
     try {
+      /*
+       * IMPORTANT:
+       * This MUST remain normal JavaScript
+       * template-literal syntax.
+       */
       const resultUrl =
-        `${WAN_RESULT_BASE}/${encodeURIComponent(
-          eventId
-        )}`;
+        `${WAN_RESULT_BASE}/${encodeURIComponent(eventId)}`;
 
       console.log(
         "WAN 2.2 RESULT URL:",
@@ -666,9 +664,9 @@ export async function GET(request) {
       eventId
     );
 
-    /*
-      Check newest event first.
-    */
+    /* =====================================================
+       CHECK EVENTS — NEWEST FIRST
+    ===================================================== */
 
     for (
       let i = events.length - 1;
@@ -683,9 +681,9 @@ export async function GET(request) {
           event.event || ""
         ).toLowerCase();
 
-      /* ---------------------------------------------------
+      /* ===================================================
          COMPLETE
-      --------------------------------------------------- */
+      =================================================== */
 
       if (
         eventName === "complete" ||
@@ -751,9 +749,9 @@ export async function GET(request) {
         });
       }
 
-      /* ---------------------------------------------------
+      /* ===================================================
          ERROR
-      --------------------------------------------------- */
+      =================================================== */
 
       if (
         eventName === "error"
@@ -764,12 +762,6 @@ export async function GET(request) {
             event.data
           )
         );
-
-        /*
-          Some queued responses may contain
-          an empty/null error event.
-          Do not immediately kill the job.
-        */
 
         if (
           event.data === null ||
@@ -833,10 +825,9 @@ export async function GET(request) {
       }
     }
 
-    /*
-      No complete event yet.
-      Keep polling.
-    */
+    /* =====================================================
+       STILL RUNNING
+    ===================================================== */
 
     return NextResponse.json({
       success: true,
@@ -847,10 +838,9 @@ export async function GET(request) {
         "Wan 2.2 is still generating your video.",
     });
   } catch (error) {
-    /*
-      A timeout here does NOT mean
-      the Wan job failed.
-    */
+    /* =====================================================
+       TIMEOUT DOES NOT MEAN WAN FAILED
+    ===================================================== */
 
     if (
       error?.name ===
@@ -877,9 +867,9 @@ export async function GET(request) {
     );
 
     /*
-      Soft-fail so the frontend
-      can keep polling.
-    */
+     * Soft-fail so the frontend can
+     * continue polling the same job.
+     */
 
     return NextResponse.json({
       success: true,
