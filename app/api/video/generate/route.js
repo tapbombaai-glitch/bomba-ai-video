@@ -328,7 +328,7 @@ ${prompt}
       finalPrompt,
       6,
       DEFAULT_NEGATIVE_PROMPT,
-      10,
+      5,
       1,
       1,
       0,
