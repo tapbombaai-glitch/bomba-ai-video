@@ -136,13 +136,17 @@ export default function Home() {
 
   /* =====================================================
      CHECK VIDEO
-     
+
      IMPORTANT:
-     This is now SEQUENTIAL.
-     
+     This is SEQUENTIAL.
+
      We wait for one request to finish before starting
-     another request. This prevents multiple GET requests
-     from hitting the same Wan SSE event at the same time.
+     another request.
+
+     FAILED JOBS ARE NOT RETRIED.
+     EXPIRED EVENTS ARE NOT RETRIED.
+
+     STATUS TIME IS DISPLAYED IN SECONDS.
   ===================================================== */
 
   const pollVideo = async (predictionId) => {
@@ -155,24 +159,29 @@ export default function Home() {
     pollingRef.current = controller;
 
     const maxAttempts = 12;
+    const startedAt = Date.now();
 
-    for (let attempts = 1; attempts <= maxAttempts; attempts++) {
+    for (
+      let attempts = 1;
+      attempts <= maxAttempts;
+      attempts++
+    ) {
       if (controller.cancelled) {
         return;
       }
 
       try {
-        const elapsedMinutes = Math.round(
-          ((attempts - 1) * 55) / 60
+        const elapsedSeconds = Math.floor(
+          (Date.now() - startedAt) / 1000
         );
 
         if (attempts === 1) {
           setStatus(
-            "Connecting to Wan 2.2... 🎬"
+            "Connecting to Wan 2.2... 🎬 0 sec"
           );
         } else {
           setStatus(
-            `Wan 2.2 is still generating your video... ${elapsedMinutes} min`
+            `Wan 2.2 is still generating your video... ${elapsedSeconds} sec`
           );
         }
 
@@ -210,8 +219,8 @@ export default function Home() {
           );
 
           /*
-            If the server returned something unexpected,
-            wait and make another sequential attempt.
+            Invalid server response is treated as a
+            temporary connection problem.
           */
 
           if (attempts < maxAttempts) {
@@ -233,9 +242,6 @@ export default function Home() {
 
         /* ===============================================
            VIDEO READY
-           
-           IMPORTANT:
-           route.js returns "completed", not "succeeded".
         =============================================== */
 
         if (
@@ -261,8 +267,51 @@ export default function Home() {
         }
 
         /* ===============================================
+           GENERATION FAILED
+
+           IMPORTANT:
+           This error is FINAL.
+
+           Do NOT retry it.
+        =============================================== */
+
+        if (
+          data?.status === "failed" ||
+          data?.status === "canceled"
+        ) {
+          const failedError = new Error(
+            data?.error ||
+              "Wan 2.2 video generation failed."
+          );
+
+          failedError.retryable = false;
+
+          throw failedError;
+        }
+
+        /* ===============================================
+           EXPIRED / MISSING WAN EVENT
+
+           IMPORTANT:
+           This is also FINAL.
+
+           Do NOT keep requesting the same event.
+        =============================================== */
+
+        if (!res.ok && res.status === 410) {
+          const expiredError = new Error(
+            data?.error ||
+              "The Wan 2.2 generation event expired or is no longer available."
+          );
+
+          expiredError.retryable = false;
+
+          throw expiredError;
+        }
+
+        /* ===============================================
            STILL PROCESSING
-           
+
            route.js normally returns HTTP 202 here.
         =============================================== */
 
@@ -271,14 +320,17 @@ export default function Home() {
           res.status === 202
         ) {
           if (attempts < maxAttempts) {
+            const currentSeconds = Math.floor(
+              (Date.now() - startedAt) / 1000
+            );
+
             setStatus(
-              "Wan 2.2 is still generating your video... please wait 🎬"
+              `Wan 2.2 is still generating your video... ${currentSeconds} sec`
             );
 
             /*
-              IMPORTANT:
-              Wait only AFTER the previous request has
-              completely finished.
+              Wait only AFTER the previous request
+              has completely finished.
             */
 
             await wait(3000);
@@ -291,36 +343,10 @@ export default function Home() {
         }
 
         /* ===============================================
-           GENERATION FAILED
-        =============================================== */
-
-        if (
-          data?.status === "failed" ||
-          data?.status === "canceled"
-        ) {
-          throw new Error(
-            data?.error ||
-              "Wan 2.2 video generation failed."
-          );
-        }
-
-        /* ===============================================
            HTTP ERROR
         =============================================== */
 
         if (!res.ok) {
-          /*
-            A 410 means the Wan event is no longer available.
-            Do not keep hammering the same expired event.
-          */
-
-          if (res.status === 410) {
-            throw new Error(
-              data?.error ||
-                "The Wan 2.2 generation event expired or is no longer available."
-            );
-          }
-
           throw new Error(
             data?.error ||
               data?.message ||
@@ -333,8 +359,12 @@ export default function Home() {
         =============================================== */
 
         if (attempts < maxAttempts) {
+          const currentSeconds = Math.floor(
+            (Date.now() - startedAt) / 1000
+          );
+
           setStatus(
-            "Wan 2.2 is processing your video... please wait."
+            `Wan 2.2 is processing your video... ${currentSeconds} sec`
           );
 
           await wait(3000);
@@ -354,14 +384,45 @@ export default function Home() {
           return;
         }
 
-        /*
-          Give temporary connection problems another
-          sequential attempt.
-        */
+        /* ===============================================
+           FINAL ERRORS
+
+           Failed generation and expired events must
+           stop immediately.
+
+           No retry.
+           No repeated GET requests.
+        =============================================== */
+
+        if (err?.retryable === false) {
+          if (pollingRef.current === controller) {
+            pollingRef.current = null;
+          }
+
+          setError(
+            err?.message ||
+              "Wan 2.2 video generation failed."
+          );
+
+          setStatus("");
+          setLoading(false);
+
+          return;
+        }
+
+        /* ===============================================
+           TEMPORARY CONNECTION PROBLEMS
+
+           These can still retry sequentially.
+        =============================================== */
 
         if (attempts < maxAttempts) {
+          const currentSeconds = Math.floor(
+            (Date.now() - startedAt) / 1000
+          );
+
           setStatus(
-            "Wan 2.2 is still working... reconnecting safely..."
+            `Wan 2.2 is still working... reconnecting... ${currentSeconds} sec`
           );
 
           await wait(3000);
@@ -523,8 +584,7 @@ ${prompt}
         );
 
         /*
-          IMPORTANT:
-          pollVideo is now sequential.
+          pollVideo is sequential.
           It does NOT use setInterval.
         */
 
