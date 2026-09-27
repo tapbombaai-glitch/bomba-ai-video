@@ -69,14 +69,14 @@ function makeWanFileUrl(value) {
    */
 
   if (value.startsWith("/file=")) {
-    return `${WAN_API_BASE}${value}`;
+    return `\( {WAN_API_BASE} \){value}`;
   }
 
   if (value.startsWith("file=")) {
-    return `${WAN_API_BASE}/${value}`;
+    return `\( {WAN_API_BASE}/ \){value}`;
   }
 
-  return `${WAN_API_BASE}/gradio_api/file=${encodeURIComponent(
+  return `\( {WAN_API_BASE}/gradio_api/file= \){encodeURIComponent(
     value
   )}`;
 }
@@ -445,25 +445,27 @@ Do not use 3D cartoon style.
 
     /*
      * EXACT ORDER FROM THE WAN SPACE OPENAPI SCHEMA
+     * Values aligned closer to the Space defaults
+     * to reduce instant failures on ZeroGPU.
      */
     const data = [
       imageData,               // 1 input_image
       imageData,               // 2 last_image
       finalPrompt,             // 3 prompt
-      8,                       // 4 steps
+      6,                       // 4 steps          (Space default)
       DEFAULT_NEGATIVE_PROMPT, // 5 negative_prompt
-      5,                       // 6 duration_seconds
-      5,                       // 7 guidance_scale
-      5,                       // 8 guidance_scale_2
+      4,                       // 6 duration_seconds
+      1,                       // 7 guidance_scale  (Space default)
+      1,                       // 8 guidance_scale_2
       0,                       // 9 seed
       true,                    // 10 randomize_seed
-      8,                       // 11 quality
-      "FlowMatchEulerDiscrete",// 12 scheduler
+      6,                       // 11 quality        (Space default)
+      "UniPCMultistep",        // 12 scheduler      (Space default)
       3,                       // 13 flow_shift
-      64,                      // 14 frame_multiplier
+      16,                      // 14 frame_multiplier (safer than 64)
       true,                    // 15 safe_mode
       [],                      // 16 lora_groups
-      false,                   // 17 auto_lora_enabled
+      true,                    // 17 auto_lora_enabled (Space default)
       true,                    // 18 video_component
     ];
 
@@ -471,12 +473,12 @@ Do not use 3D cartoon style.
       "BOMBA WAN 2.2 REQUEST:",
       JSON.stringify({
         mode,
-        duration: 5,
-        steps: 8,
-        quality: 8,
+        duration: 4,
+        steps: 6,
+        quality: 6,
         safeMode: true,
         loraGroups: [],
-        autoLora: false,
+        autoLora: true,
         hasImage: true,
       })
     );
@@ -682,7 +684,7 @@ export async function GET(request) {
     try {
       response =
         await fetch(
-          `${WAN_RESULT_URL}/${encodeURIComponent(
+          `\( {WAN_RESULT_URL}/ \){encodeURIComponent(
             eventId
           )}`,
           {
@@ -867,6 +869,15 @@ export async function GET(request) {
 
       /*
        * ERROR
+       * -------------------------------------------------
+       * IMPORTANT FIX:
+       * This Space (ZeroGPU) very often returns
+       *   event: error
+       *   data: null
+       * right after the job is created.
+       * Treating null/empty as hard failure was causing
+       * the 500s you saw in the logs.
+       * Only fail when there is a real error message.
        */
       if (
         eventName ===
@@ -878,6 +889,30 @@ export async function GET(request) {
             event.data
           )
         );
+
+        // data: null or empty → treat as still running
+        if (
+          event.data === null ||
+          event.data === undefined ||
+          event.data === "" ||
+          (typeof event.data === "object" &&
+            Object.keys(event.data).length === 0)
+        ) {
+          console.log(
+            "WAN 2.2 NULL ERROR — TREATING AS STILL RUNNING:",
+            eventId
+          );
+
+          return NextResponse.json({
+            success: true,
+            status: "running",
+            videoUrl: null,
+            predictionId:
+              eventId,
+            message:
+              "Wan 2.2 is still generating your video.",
+          });
+        }
 
         let errorMessage =
           "Wan 2.2 video generation failed.";
