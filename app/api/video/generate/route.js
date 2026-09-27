@@ -18,20 +18,31 @@ extra limbs, duplicate person, bad anatomy, unnatural movement,
 cartoon, anime, illustration, CGI, plastic skin,
 text, watermark, logo, subtitles,
 nudity, naked body, exposed breasts, exposed genitals
-`.replace(/\s+/g, " ").trim();
+`
+  .replace(/\s+/g, " ")
+  .trim();
+
+/* =========================================================
+   ERROR HELPERS
+   ========================================================= */
 
 function extractErrorMessage(value) {
   if (value == null) return null;
 
   if (typeof value === "string") {
-    return value.trim() || null;
+    const text = value.trim();
+    return text || null;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = extractErrorMessage(item);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
+
     return null;
   }
 
@@ -41,14 +52,18 @@ function extractErrorMessage(value) {
       "message",
       "detail",
       "details",
-      "status",
       "reason",
+      "exception",
+      "description",
     ];
 
     for (const key of keys) {
       if (value[key] != null) {
         const found = extractErrorMessage(value[key]);
-        if (found) return found;
+
+        if (found) {
+          return found;
+        }
       }
     }
 
@@ -63,11 +78,15 @@ function extractErrorMessage(value) {
 }
 
 function parsePossibleJson(value) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string") {
+    return value;
+  }
 
   const trimmed = value.trim();
 
-  if (!trimmed) return value;
+  if (!trimmed) {
+    return value;
+  }
 
   try {
     return JSON.parse(trimmed);
@@ -76,8 +95,14 @@ function parsePossibleJson(value) {
   }
 }
 
+/* =========================================================
+   WAN FILE / VIDEO HELPERS
+   ========================================================= */
+
 function makeWanFileUrl(fileData) {
-  if (!fileData) return null;
+  if (!fileData) {
+    return null;
+  }
 
   if (typeof fileData === "string") {
     if (
@@ -114,7 +139,9 @@ function makeWanFileUrl(fileData) {
 }
 
 function extractVideoUrl(value) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   if (typeof value === "string") {
     if (
@@ -175,6 +202,10 @@ function extractVideoUrl(value) {
   return null;
 }
 
+/* =========================================================
+   SSE PARSER
+   ========================================================= */
+
 function parseSSE(text) {
   const events = [];
 
@@ -185,7 +216,9 @@ function parseSSE(text) {
   const blocks = normalized.split(/\n\n+/);
 
   for (const block of blocks) {
-    if (!block.trim()) continue;
+    if (!block.trim()) {
+      continue;
+    }
 
     let eventName = null;
     const dataLines = [];
@@ -205,6 +238,7 @@ function parseSSE(text) {
 
       events.push({
         event: eventName,
+        rawData,
         data: parsePossibleJson(rawData),
       });
     }
@@ -213,26 +247,39 @@ function parseSSE(text) {
   return events;
 }
 
-async function getImageData(image) {
-  if (!image) return null;
+/* =========================================================
+   IMAGE
+   ========================================================= */
 
-  if (
-    image.startsWith("http://") ||
-    image.startsWith("https://")
-  ) {
-    return image;
+function getImageData(image) {
+  if (!image) {
+    return null;
   }
 
   return image;
 }
 
+/* =========================================================
+   VIDEO PROXY
+   ========================================================= */
+
 async function proxyVideo(videoUrl) {
   try {
+    console.log(
+      "BOMBA VIDEO PROXY REQUEST:",
+      videoUrl
+    );
+
     const response = await fetch(videoUrl, {
       cache: "no-store",
     });
 
     if (!response.ok) {
+      console.error(
+        "BOMBA VIDEO PROXY HTTP ERROR:",
+        response.status
+      );
+
       return NextResponse.json(
         {
           error: `Video download failed with status ${response.status}`,
@@ -249,7 +296,8 @@ async function proxyVideo(videoUrl) {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control":
+          "public, max-age=3600",
       },
     });
   } catch (error) {
@@ -260,7 +308,9 @@ async function proxyVideo(videoUrl) {
 
     return NextResponse.json(
       {
-        error: "Unable to load generated video.",
+        error:
+          extractErrorMessage(error) ||
+          "Unable to load generated video.",
       },
       { status: 502 }
     );
@@ -269,7 +319,7 @@ async function proxyVideo(videoUrl) {
 
 /* =========================================================
    POST
-   Starts a Wan 2.2 generation job.
+   Start Wan 2.2 generation
    ========================================================= */
 
 export async function POST(request) {
@@ -284,7 +334,8 @@ export async function POST(request) {
     if (!prompt) {
       return NextResponse.json(
         {
-          error: "A video prompt is required.",
+          error:
+            "A video prompt is required.",
         },
         { status: 400 }
       );
@@ -293,15 +344,15 @@ export async function POST(request) {
     if (!characterImage) {
       return NextResponse.json(
         {
-          error: "Please upload a character image.",
+          error:
+            "Please upload a character image.",
         },
         { status: 400 }
       );
     }
 
-    const imageData = await getImageData(
-      characterImage
-    );
+    const imageData =
+      getImageData(characterImage);
 
     const finalPrompt = `
 Photorealistic live-action cinematic video.
@@ -321,6 +372,11 @@ Keep all characters appropriately clothed.
 
 ${prompt}
 `.trim();
+
+    /*
+      Keep the existing Wan parameter order.
+      Duration remains 5 seconds for this test.
+    */
 
     const data = [
       imageData,
@@ -344,7 +400,36 @@ ${prompt}
     ];
 
     console.log(
+      "================================================="
+    );
+
+    console.log(
       "BOMBA WAN STARTING GENERATION"
+    );
+
+    console.log(
+      "BOMBA WAN IMAGE TYPE:",
+      typeof imageData
+    );
+
+    console.log(
+      "BOMBA WAN PROMPT LENGTH:",
+      finalPrompt.length
+    );
+
+    console.log(
+      "BOMBA WAN DURATION:",
+      data[5],
+      "seconds"
+    );
+
+    console.log(
+      "BOMBA WAN START URL:",
+      WAN_CALL_URL
+    );
+
+    console.log(
+      "================================================="
     );
 
     const response = await fetch(
@@ -352,7 +437,10 @@ ${prompt}
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":
+            "application/json",
+          Accept:
+            "application/json",
         },
         body: JSON.stringify({
           data,
@@ -371,34 +459,41 @@ ${prompt}
 
     console.log(
       "BOMBA WAN START RESPONSE:",
-      responseText.substring(0, 2000)
+      responseText.substring(0, 3000)
     );
 
     if (!response.ok) {
       let parsed;
 
       try {
-        parsed = JSON.parse(responseText);
+        parsed =
+          JSON.parse(responseText);
       } catch {
         parsed = responseText;
       }
 
+      const message =
+        extractErrorMessage(parsed) ||
+        `Wan start request failed (${response.status}).`;
+
+      console.error(
+        "BOMBA WAN START ERROR:",
+        message
+      );
+
       return NextResponse.json(
         {
-          error:
-            extractErrorMessage(parsed) ||
-            `Wan start request failed (${response.status}).`,
+          error: message,
         },
-        {
-          status: 502,
-        }
+        { status: 502 }
       );
     }
 
     let result;
 
     try {
-      result = JSON.parse(responseText);
+      result =
+        JSON.parse(responseText);
     } catch {
       result = null;
     }
@@ -456,7 +551,7 @@ ${prompt}
 
 /* =========================================================
    GET
-   Reads the Gradio SSE result stream.
+   Read Wan Gradio SSE result
    ========================================================= */
 
 export async function GET(request) {
@@ -467,10 +562,10 @@ export async function GET(request) {
     const videoUrl =
       searchParams.get("videoUrl");
 
-    /*
-      If the frontend gives us a completed video URL,
-      proxy the actual video through BOMBA.
-    */
+    /* -----------------------------------------------
+       Completed video proxy
+    ----------------------------------------------- */
+
     if (videoUrl) {
       return proxyVideo(videoUrl);
     }
@@ -500,19 +595,13 @@ export async function GET(request) {
       resultUrl
     );
 
-    /*
-      IMPORTANT:
-      Gradio returns an SSE stream here.
-      We open ONE result stream for this event.
-    */
-
     const controller =
       new AbortController();
 
     /*
-      Leave a little safety margin below Vercel's
-      runtime timeout.
+      Keep this below the function safety limit.
     */
+
     const timeout = setTimeout(() => {
       controller.abort();
     }, 50000);
@@ -527,6 +616,8 @@ export async function GET(request) {
           headers: {
             Accept:
               "text/event-stream",
+            "Cache-Control":
+              "no-cache",
           },
           cache: "no-store",
           signal: controller.signal,
@@ -541,7 +632,8 @@ export async function GET(request) {
       );
 
       if (
-        error?.name === "AbortError"
+        error?.name ===
+        "AbortError"
       ) {
         return NextResponse.json(
           {
@@ -577,14 +669,12 @@ export async function GET(request) {
 
     console.log(
       "BOMBA WAN RESULT RESPONSE:",
-      resultText.substring(0, 4000)
+      resultText.substring(0, 6000)
     );
 
-    /*
-      A 404 can happen when an old/expired event ID
-      is requested. Return a readable error instead
-      of allowing the frontend to display an object.
-    */
+    /* -----------------------------------------------
+       HTTP failure
+    ----------------------------------------------- */
 
     if (!response.ok) {
       let parsedError;
@@ -604,63 +694,149 @@ export async function GET(request) {
 
       console.error(
         "BOMBA WAN RESULT HTTP ERROR:",
-        message
+        {
+          status: response.status,
+          eventId,
+          message,
+          rawResponse:
+            resultText.substring(
+              0,
+              6000
+            ),
+        }
       );
+
+      /*
+        404 means the event is no longer available.
+        Convert it to 410 so the frontend knows
+        this is a final/expired job.
+      */
 
       return NextResponse.json(
         {
           error: message,
           jobId: eventId,
+          status:
+            response.status === 404
+              ? "expired"
+              : "failed",
         },
         {
-          status: response.status === 404
-            ? 410
-            : 502,
+          status:
+            response.status === 404
+              ? 410
+              : 502,
         }
       );
     }
+
+    /* -----------------------------------------------
+       Parse SSE
+    ----------------------------------------------- */
 
     const events =
       parseSSE(resultText);
 
     console.log(
+      "BOMBA WAN SSE EVENT COUNT:",
+      events.length
+    );
+
+    console.log(
       "BOMBA WAN SSE EVENTS:",
       events.map((item) => ({
         event: item.event,
-        dataType:
-          typeof item.data,
+        rawData:
+          typeof item.rawData ===
+          "string"
+            ? item.rawData.substring(
+                0,
+                2000
+              )
+            : null,
       }))
     );
 
-    /*
-      Search from the end because the final
-      complete/error event is what we need.
-    */
+    /* -----------------------------------------------
+       ERROR EVENT
+    ----------------------------------------------- */
 
     for (
-      let index = events.length - 1;
-      index >= 0;
-      index--
+      let index = 0;
+      index < events.length;
+      index++
     ) {
       const item = events[index];
 
       if (
         item.event === "error"
       ) {
+        /*
+          THIS IS THE IMPORTANT DIAGNOSTIC PART.
+
+          We log both:
+          1. parsed error
+          2. raw SSE data
+
+          So we can see exactly what
+          Wan 2.2 is returning.
+        */
+
+        console.error(
+          "================================================="
+        );
+
+        console.error(
+          "BOMBA WAN RAW ERROR EVENT:"
+        );
+
+        console.error(
+          item.rawData
+        );
+
+        console.error(
+          "BOMBA WAN PARSED ERROR EVENT:"
+        );
+
+        console.error(
+          item.data
+        );
+
+        console.error(
+          "BOMBA WAN ERROR EVENT JSON:"
+        );
+
+        try {
+          console.error(
+            JSON.stringify(
+              item.data,
+              null,
+              2
+            )
+          );
+        } catch {}
+
+        console.error(
+          "================================================="
+        );
+
         const message =
           extractErrorMessage(
             item.data
           ) ||
+          (
+            typeof item.rawData ===
+            "string"
+              ? item.rawData
+              : null
+          ) ||
           "Wan 2.2 video generation failed.";
-
-        console.error(
-          "BOMBA WAN GENERATION ERROR:",
-          message
-        );
 
         return NextResponse.json(
           {
             error: message,
+            rawWanError:
+              item.rawData || null,
             jobId: eventId,
             status: "failed",
           },
@@ -669,20 +845,29 @@ export async function GET(request) {
       }
     }
 
-    /*
-      Look for the completed output.
-    */
+    /* -----------------------------------------------
+       COMPLETE EVENT
+    ----------------------------------------------- */
 
     for (
-      let index = events.length - 1;
+      let index =
+        events.length - 1;
       index >= 0;
       index--
     ) {
       const item = events[index];
 
       if (
-        item.event === "complete"
+        item.event ===
+        "complete"
       ) {
+        console.log(
+          "BOMBA WAN COMPLETE DATA:",
+          JSON.stringify(
+            item.data
+          ).substring(0, 6000)
+        );
+
         const foundVideo =
           extractVideoUrl(
             item.data
@@ -703,17 +888,23 @@ export async function GET(request) {
             {
               status: "completed",
               jobId: eventId,
-              videoUrl: proxiedUrl,
+              videoUrl:
+                proxiedUrl,
             },
             { status: 200 }
           );
         }
 
         console.error(
-          "BOMBA WAN COMPLETE EVENT HAD NO VIDEO:",
+          "BOMBA WAN COMPLETE EVENT HAD NO VIDEO:"
+        );
+
+        console.error(
           JSON.stringify(
-            item.data
-          ).substring(0, 4000)
+            item.data,
+            null,
+            2
+          ).substring(0, 6000)
         );
 
         return NextResponse.json(
@@ -728,11 +919,13 @@ export async function GET(request) {
       }
     }
 
-    /*
-      If the stream ended without complete/error,
-      tell the frontend that generation is still
-      processing.
-    */
+    /* -----------------------------------------------
+       NO FINAL EVENT YET
+    ----------------------------------------------- */
+
+    console.log(
+      "BOMBA WAN STREAM ENDED WITHOUT COMPLETE OR ERROR."
+    );
 
     return NextResponse.json(
       {
