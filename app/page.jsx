@@ -1,730 +1,1477 @@
-import { NextResponse } from "next/server";
+"use client";
 
-export const runtime = "nodejs";
-export const maxDuration = 300;
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
 
-const WAN_API_BASE =
-  "https://observantdistressed-wan2-2-i2v-v3.hf.space";
+export default function Home() {
+  const [mode, setMode] = useState("Movie");
+  const [prompt, setPrompt] = useState("");
+  const [characterImage, setCharacterImage] = useState(null);
 
-const WAN_API_URL =
-  `${WAN_API_BASE}/gradio_api/call/generate_video`;
+  const [loading, setLoading] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
 
-const DEFAULT_NEGATIVE_PROMPT = `
-cartoon, anime, illustration, CGI, 3D render, plastic skin,
-deformed face, distorted body, extra fingers, extra limbs,
-bad hands, duplicate person, blurry face, low quality,
-unnatural movement, text, watermark, logo,
-nudity, naked body, exposed breasts, exposed genitals,
-sexual content, explicit content
-`.trim();
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiEmail, setApiEmail] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiMessage, setApiMessage] = useState("");
 
-/* =========================================================
-   HELPERS
-========================================================= */
+  const pollingRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-function parseJsonSafely(text) {
-  if (!text) return null;
+  const modes = [
+    "Movie",
+    "Program",
+    "Acting",
+    "Ad",
+    "Social Media",
+    "Presenter",
+    "Story",
+  ];
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function parseSSE(text) {
-  const events = [];
-
-  if (!text) return events;
-
-  const blocks = text.split(/\n\n+/);
-
-  for (const block of blocks) {
-    if (!block.trim()) continue;
-
-    let eventName = "message";
-    const dataLines = [];
-
-    for (const line of block.split("\n")) {
-      if (line.startsWith("event:")) {
-        eventName = line.substring(6).trim();
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        pollingRef.current.cancelled = true;
+        pollingRef.current = null;
       }
+    };
+  }, []);
 
-      if (line.startsWith("data:")) {
-        dataLines.push(line.substring(5).trim());
-      }
-    }
+  /* =====================================================
+     SAFE JSON RESPONSE READER
+  ===================================================== */
 
-    if (!dataLines.length) continue;
+  const readJsonResponse = async (res) => {
+    const text = await res.text();
 
-    const rawData = dataLines.join("\n");
-    const parsedData = parseJsonSafely(rawData);
-
-    events.push({
-      event: eventName,
-      rawData,
-      data: parsedData ?? rawData,
-    });
-  }
-
-  return events;
-}
-
-function extractErrorMessage(value) {
-  if (!value) {
-    return "Wan 2.2 video generation failed.";
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = extractErrorMessage(item);
-      if (found) return found;
-    }
-  }
-
-  if (typeof value === "object") {
-    const keys = [
-      "error",
-      "message",
-      "detail",
-      "details",
-      "reason",
-      "status",
-    ];
-
-    for (const key of keys) {
-      if (value[key]) {
-        const found = extractErrorMessage(value[key]);
-        if (found) return found;
-      }
+    if (!text) {
+      return {};
     }
 
     try {
-      return JSON.stringify(value);
-    } catch {
-      return "Wan 2.2 video generation failed.";
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error(
+        "BOMBA NON-JSON RESPONSE:",
+        text
+      );
+
+      throw new Error(
+        text.length > 500
+          ? text.substring(0, 500)
+          : text
+      );
     }
-  }
+  };
 
-  return "Wan 2.2 video generation failed.";
-}
+  /* =====================================================
+     IMAGE UPLOAD
+  ===================================================== */
 
-function extractVideoUrl(value) {
-  if (!value) return null;
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
 
-  if (typeof value === "string") {
-    if (
-      value.startsWith("http://") ||
-      value.startsWith("https://")
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image must be smaller than 10MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setCharacterImage(reader.result);
+        setError("");
+      }
+    };
+
+    reader.onerror = () => {
+      alert(
+        "Failed to read the image. Please try another file."
+      );
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const removeCharacterImage = () => {
+    setCharacterImage(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  /* =====================================================
+     STOP VIDEO CHECKING
+  ===================================================== */
+
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      pollingRef.current.cancelled = true;
+      pollingRef.current = null;
+    }
+  };
+
+  /* =====================================================
+     WAIT
+  ===================================================== */
+
+  const wait = (milliseconds) => {
+    return new Promise((resolve) => {
+      setTimeout(resolve, milliseconds);
+    });
+  };
+
+  /* =====================================================
+     CHECK VIDEO
+
+     IMPORTANT:
+     This is SEQUENTIAL.
+
+     We wait for one request to finish before starting
+     another request.
+
+     FAILED JOBS ARE NOT RETRIED.
+     EXPIRED EVENTS ARE NOT RETRIED.
+
+     STATUS TIME IS DISPLAYED IN SECONDS.
+  ===================================================== */
+
+  const pollVideo = async (predictionId) => {
+    const controller = {
+      cancelled: false,
+    };
+
+    stopPolling();
+
+    pollingRef.current = controller;
+
+    const maxAttempts = 12;
+    const startedAt = Date.now();
+
+    for (
+      let attempts = 1;
+      attempts <= maxAttempts;
+      attempts++
     ) {
-      return value;
-    }
+      if (controller.cancelled) {
+        return;
+      }
 
-    return null;
-  }
+      try {
+        const elapsedSeconds = Math.floor(
+          (Date.now() - startedAt) / 1000
+        );
 
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = extractVideoUrl(item);
-      if (found) return found;
-    }
+        if (attempts === 1) {
+          setStatus(
+            "Connecting to Wan 2.2... 🎬 0 sec"
+          );
+        } else {
+          setStatus(
+            `Wan 2.2 is still generating your video... ${elapsedSeconds} sec`
+          );
+        }
 
-    return null;
-  }
+        console.log(
+          "BOMBA WAN STATUS CHECK:",
+          attempts,
+          predictionId
+        );
 
-  if (typeof value === "object") {
-    const possibleKeys = [
-      "video",
-      "video_url",
-      "videoUrl",
-      "url",
-      "path",
-      "file",
-      "value",
-      "data",
-      "output",
-    ];
+        const res = await fetch(
+          `/api/video/generate?predictionId=${encodeURIComponent(
+            predictionId
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+              Accept: "application/json",
+            },
+          }
+        );
 
-    for (const key of possibleKeys) {
-      if (value[key]) {
-        const found = extractVideoUrl(value[key]);
-        if (found) return found;
+        if (controller.cancelled) {
+          return;
+        }
+
+        let data;
+
+        try {
+          data = await readJsonResponse(res);
+        } catch (parseError) {
+          console.error(
+            "BOMBA STATUS RESPONSE ERROR:",
+            parseError
+          );
+
+          /*
+            Invalid server response is treated as a
+            temporary connection problem.
+          */
+
+          if (attempts < maxAttempts) {
+            setStatus(
+              "Wan 2.2 is processing the video... reconnecting..."
+            );
+
+            await wait(3000);
+            continue;
+          }
+
+          throw parseError;
+        }
+
+        console.log(
+          "BOMBA VIDEO STATUS:",
+          data
+        );
+
+        /* ===============================================
+           VIDEO READY
+        =============================================== */
+
+        if (
+          res.ok &&
+          data?.status === "completed" &&
+          data?.videoUrl
+        ) {
+          console.log(
+            "BOMBA VIDEO READY:",
+            data.videoUrl
+          );
+
+          if (pollingRef.current === controller) {
+            pollingRef.current = null;
+          }
+
+          setVideoUrl(data.videoUrl);
+          setStatus("Video ready! 🎬");
+          setError("");
+          setLoading(false);
+
+          return;
+        }
+
+        /* ===============================================
+           GENERATION FAILED
+
+           IMPORTANT:
+           This error is FINAL.
+
+           Do NOT retry it.
+        =============================================== */
+
+        if (
+          data?.status === "failed" ||
+          data?.status === "canceled"
+        ) {
+          const failedError = new Error(
+            data?.error ||
+              "Wan 2.2 video generation failed."
+          );
+
+          failedError.retryable = false;
+
+          throw failedError;
+        }
+
+        /* ===============================================
+           EXPIRED / MISSING WAN EVENT
+
+           IMPORTANT:
+           This is also FINAL.
+
+           Do NOT keep requesting the same event.
+        =============================================== */
+
+        if (!res.ok && res.status === 410) {
+          const expiredError = new Error(
+            data?.error ||
+              "The Wan 2.2 generation event expired or is no longer available."
+          );
+
+          expiredError.retryable = false;
+
+          throw expiredError;
+        }
+
+        /* ===============================================
+           STILL PROCESSING
+
+           route.js normally returns HTTP 202 here.
+        =============================================== */
+
+        if (
+          data?.status === "processing" ||
+          res.status === 202
+        ) {
+          if (attempts < maxAttempts) {
+            const currentSeconds = Math.floor(
+              (Date.now() - startedAt) / 1000
+            );
+
+            setStatus(
+              `Wan 2.2 is still generating your video... ${currentSeconds} sec`
+            );
+
+            /*
+              Wait only AFTER the previous request
+              has completely finished.
+            */
+
+            await wait(3000);
+            continue;
+          }
+
+          throw new Error(
+            "The video is taking longer than expected. Wan 2.2 may still be generating it."
+          );
+        }
+
+        /* ===============================================
+           HTTP ERROR
+        =============================================== */
+
+        if (!res.ok) {
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              `Unable to check video status (${res.status}).`
+          );
+        }
+
+        /* ===============================================
+           UNKNOWN RESPONSE
+        =============================================== */
+
+        if (attempts < maxAttempts) {
+          const currentSeconds = Math.floor(
+            (Date.now() - startedAt) / 1000
+          );
+
+          setStatus(
+            `Wan 2.2 is processing your video... ${currentSeconds} sec`
+          );
+
+          await wait(3000);
+          continue;
+        }
+
+        throw new Error(
+          "Wan 2.2 did not return a final video result."
+        );
+      } catch (err) {
+        console.error(
+          "BOMBA VIDEO STATUS ERROR:",
+          err
+        );
+
+        if (controller.cancelled) {
+          return;
+        }
+
+        /* ===============================================
+           FINAL ERRORS
+
+           Failed generation and expired events must
+           stop immediately.
+
+           No retry.
+           No repeated GET requests.
+        =============================================== */
+
+        if (err?.retryable === false) {
+          if (pollingRef.current === controller) {
+            pollingRef.current = null;
+          }
+
+          setError(
+            err?.message ||
+              "Wan 2.2 video generation failed."
+          );
+
+          setStatus("");
+          setLoading(false);
+
+          return;
+        }
+
+        /* ===============================================
+           TEMPORARY CONNECTION PROBLEMS
+
+           These can still retry sequentially.
+        =============================================== */
+
+        if (attempts < maxAttempts) {
+          const currentSeconds = Math.floor(
+            (Date.now() - startedAt) / 1000
+          );
+
+          setStatus(
+            `Wan 2.2 is still working... reconnecting... ${currentSeconds} sec`
+          );
+
+          await wait(3000);
+          continue;
+        }
+
+        if (pollingRef.current === controller) {
+          pollingRef.current = null;
+        }
+
+        setError(
+          err?.message ||
+            "Unable to retrieve the generated video."
+        );
+
+        setStatus("");
+        setLoading(false);
+
+        return;
       }
     }
-  }
 
-  return null;
-}
-
-function findVideoInEvents(events) {
-  for (const item of events) {
-    const found = extractVideoUrl(item.data);
-
-    if (found) {
-      return found;
+    if (pollingRef.current === controller) {
+      pollingRef.current = null;
     }
-  }
 
-  return null;
-}
-
-/* =========================================================
-   IMAGE
-========================================================= */
-
-function getImageData(characterImage) {
-  if (!characterImage) return null;
-
-  if (typeof characterImage !== "string") {
-    return null;
-  }
-
-  return characterImage;
-}
-
-/* =========================================================
-   VIDEO PROXY
-========================================================= */
-
-async function proxyVideo(videoUrl) {
-  console.log("BOMBA WAN PROXY VIDEO:", videoUrl);
-
-  const response = await fetch(videoUrl, {
-    method: "GET",
-    cache: "no-store",
-  });
-
-  if (!response.ok || !response.body) {
-    console.error(
-      "BOMBA WAN VIDEO PROXY FAILED:",
-      response.status,
-      response.statusText
+    setError(
+      "The video is taking longer than expected. Please try again shortly."
     );
 
-    return NextResponse.json(
-      {
-        error: `Unable to retrieve generated video (${response.status}).`,
-      },
-      { status: 502 }
-    );
-  }
+    setStatus("");
+    setLoading(false);
+  };
 
-  const contentType =
-    response.headers.get("content-type") ||
-    "video/mp4";
+  /* =====================================================
+     GENERATE VIDEO
+  ===================================================== */
 
-  return new Response(response.body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "no-store, no-cache, must-revalidate",
-      "Accept-Ranges": "bytes",
-    },
-  });
-}
-
-/* =========================================================
-   POST
-   START WAN GENERATION
-========================================================= */
-
-export async function POST(request) {
-  try {
-    const body = await request.json();
-
-    const {
-      prompt,
-      characterImage,
-    } = body || {};
-
-    if (!prompt || !prompt.trim()) {
-      return NextResponse.json(
-        {
-          error: "Please describe your video first.",
-        },
-        { status: 400 }
+  const handleGenerateVideo = async () => {
+    if (!prompt.trim()) {
+      setError(
+        "Please describe your video first."
       );
+      return;
     }
 
     if (!characterImage) {
-      return NextResponse.json(
-        {
-          error: "Please upload a character photo first.",
-        },
-        { status: 400 }
+      setError(
+        "Please upload a picture first."
       );
+      return;
     }
 
-    const imageData = getImageData(characterImage);
+    stopPolling();
 
-    if (!imageData) {
-      return NextResponse.json(
-        {
-          error: "Invalid character image.",
-        },
-        { status: 400 }
-      );
-    }
+    setLoading(true);
+    setError("");
+    setVideoUrl(null);
+    setStatus(
+      "Preparing your realistic video..."
+    );
 
-    const finalPrompt = `
-${prompt.trim()}
+    try {
+      const realisticPrompt = `
+Photorealistic live-action video, cinematic quality, natural lighting, real human skin texture, realistic body movement, natural environment, no cartoon, no anime, no illustration style.
 
-Create a photorealistic live-action video using the supplied
-character image as the main visual identity.
+Mode: ${mode}
 
-Keep the person's face, identity, skin tone, hairstyle and
-overall appearance consistent with the reference image.
-
-Natural human movement.
-Natural facial expressions.
-Realistic body proportions.
-Realistic environment.
-Cinematic camera movement.
-Realistic lighting.
-Photorealistic live-action appearance.
-
-No cartoon.
-No anime.
-No illustration.
-No CGI appearance.
-No nudity.
-No sexual content.
+User idea:
+${prompt}
 `.trim();
 
-    /*
-      IMPORTANT:
-      Keep the Wan input order exactly as required by
-      the Space OpenAPI schema.
-    */
-
-    const data = [
-      imageData,
-      imageData,
-      finalPrompt,
-      6,
-      DEFAULT_NEGATIVE_PROMPT,
-      5,
-      1,
-      1,
-      0,
-      true,
-      6,
-      "UniPCMultistep",
-      3,
-      16,
-      true,
-      [],
-      false,
-      true,
-    ];
-
-    console.log("=================================================");
-    console.log("BOMBA WAN STARTING GENERATION");
-    console.log("Image type:", typeof imageData);
-    console.log("Prompt length:", finalPrompt.length);
-    console.log("Duration:", 5);
-    console.log("WAN URL:", WAN_API_URL);
-
-    const response = await fetch(WAN_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        data,
-      }),
-      cache: "no-store",
-    });
-
-    const responseText = await response.text();
-
-    console.log(
-      "BOMBA WAN START STATUS:",
-      response.status
-    );
-
-    console.log(
-      "BOMBA WAN START RESPONSE:",
-      responseText.substring(0, 6000)
-    );
-
-    if (!response.ok) {
-      return NextResponse.json(
+      const res = await fetch(
+        "/api/video/generate",
         {
-          error:
-            extractErrorMessage(
-              parseJsonSafely(responseText)
-            ) ||
-            `Wan 2.2 returned HTTP ${response.status}.`,
-        },
-        { status: 502 }
-      );
-    }
-
-    const startData = parseJsonSafely(responseText);
-
-    const eventId =
-      startData?.event_id ||
-      startData?.eventId ||
-      startData?.id;
-
-    if (!eventId) {
-      console.error(
-        "BOMBA WAN NO EVENT ID:",
-        responseText
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Wan 2.2 accepted the request but did not return a job ID.",
-        },
-        { status: 502 }
-      );
-    }
-
-    console.log(
-      "BOMBA WAN EVENT ID:",
-      eventId
-    );
-
-    return NextResponse.json({
-      jobId: eventId,
-      predictionId: eventId,
-      eventId,
-      status: "queued",
-    });
-  } catch (error) {
-    console.error(
-      "BOMBA WAN POST ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error?.message ||
-          "Unable to start Wan 2.2 video generation.",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/* =========================================================
-   GET
-   CHECK WAN RESULT
-========================================================= */
-
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-
-  const videoUrl = searchParams.get("videoUrl");
-
-  const predictionId =
-    searchParams.get("predictionId") ||
-    searchParams.get("jobId") ||
-    searchParams.get("eventId");
-
-  /* -------------------------------------------------------
-     DIRECT VIDEO PROXY
-  ------------------------------------------------------- */
-
-  if (videoUrl) {
-    try {
-      return await proxyVideo(videoUrl);
-    } catch (error) {
-      console.error(
-        "BOMBA WAN VIDEO PROXY ERROR:",
-        error
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            error?.message ||
-            "Unable to retrieve generated video.",
-        },
-        { status: 502 }
-      );
-    }
-  }
-
-  /* -------------------------------------------------------
-     NO JOB ID
-  ------------------------------------------------------- */
-
-  if (!predictionId) {
-    return NextResponse.json(
-      {
-        error: "Missing video job ID.",
-      },
-      { status: 400 }
-    );
-  }
-
-  const resultUrl =
-    `${WAN_API_URL}/${encodeURIComponent(predictionId)}`;
-
-  console.log("=================================================");
-  console.log("BOMBA WAN CHECKING RESULT");
-  console.log("Event ID:", predictionId);
-  console.log("Result URL:", resultUrl);
-
-  const controller = new AbortController();
-
-  /*
-    Keep this below Vercel's function limit.
-    The frontend polls again if the job is still running.
-  */
-
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, 45000);
-
-  try {
-    const response = await fetch(resultUrl, {
-      method: "GET",
-      headers: {
-        Accept: "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    const responseText = await response.text();
-
-    console.log(
-      "BOMBA WAN RESULT HTTP STATUS:",
-      response.status
-    );
-
-    console.log(
-      "BOMBA WAN FULL RESULT RESPONSE:",
-      responseText.substring(0, 6000)
-    );
-
-    /* -----------------------------------------------------
-       EXPIRED / UNKNOWN EVENT
-    ----------------------------------------------------- */
-
-    if (response.status === 404) {
-      console.error(
-        "BOMBA WAN RESULT 404:",
-        predictionId
-      );
-
-      return NextResponse.json(
-        {
-          status: "expired",
-          error:
-            "Wan 2.2 could not find this generation job. The job may have expired.",
-          jobId: predictionId,
-        },
-        { status: 410 }
-      );
-    }
-
-    if (!response.ok) {
-      console.error(
-        "BOMBA WAN RESULT HTTP ERROR:",
-        response.status,
-        responseText
-      );
-
-      return NextResponse.json(
-        {
-          status: "failed",
-          error:
-            extractErrorMessage(
-              parseJsonSafely(responseText)
-            ) ||
-            `Wan 2.2 returned HTTP ${response.status}.`,
-          jobId: predictionId,
-        },
-        { status: 502 }
-      );
-    }
-
-    const events = parseSSE(responseText);
-
-    console.log(
-      "BOMBA WAN SSE EVENT COUNT:",
-      events.length
-    );
-
-    for (const event of events) {
-      console.log(
-        "BOMBA WAN SSE EVENT:",
-        event.event
-      );
-
-      console.log(
-        "BOMBA WAN SSE RAW DATA:",
-        String(event.rawData).substring(0, 3000)
-      );
-    }
-
-    /* -----------------------------------------------------
-       CHECK ERROR EVENTS
-    ----------------------------------------------------- */
-
-    for (const item of events) {
-      if (
-        item.event === "error" ||
-        item.event === "failed"
-      ) {
-        console.error(
-          "BOMBA WAN RAW ERROR EVENT:",
-          item.rawData
-        );
-
-        console.error(
-          "BOMBA WAN PARSED ERROR EVENT:",
-          item.data
-        );
-
-        console.error(
-          "BOMBA WAN ERROR EVENT JSON:",
-          JSON.stringify(item.data)
-        );
-
-        const message =
-          extractErrorMessage(item.data);
-
-        return NextResponse.json(
-          {
-            status: "failed",
-            error: message,
-            rawWanError: item.rawData || null,
-            jobId: predictionId,
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json",
           },
-          { status: 502 }
+          body: JSON.stringify({
+            mode,
+            prompt: realisticPrompt,
+            characterImage,
+          }),
+        }
+      );
+
+      let data;
+
+      try {
+        data = await readJsonResponse(res);
+      } catch (parseError) {
+        console.error(
+          "BOMBA GENERATE RESPONSE ERROR:",
+          parseError
+        );
+
+        throw new Error(
+          parseError?.message ||
+            "The video server returned an invalid response."
         );
       }
-    }
-
-    /* -----------------------------------------------------
-       LOOK FOR VIDEO
-    ----------------------------------------------------- */
-
-    const foundVideo =
-      findVideoInEvents(events);
-
-    if (foundVideo) {
-      console.log(
-        "================================================="
-      );
 
       console.log(
-        "BOMBA WAN VIDEO FOUND:",
-        foundVideo
+        "BOMBA GENERATE RESPONSE:",
+        data
       );
 
-      console.log(
-        "BOMBA WAN JOB COMPLETE:",
-        predictionId
-      );
-
-      /*
-        Return a BOMBA proxy URL instead of exposing the
-        temporary Hugging Face file directly.
-      */
-
-      const baseUrl =
-        new URL(request.url).origin;
-
-      const proxyUrl =
-        `${baseUrl}/api/video/generate?videoUrl=${encodeURIComponent(
-          foundVideo
-        )}`;
-
-      return NextResponse.json({
-        status: "completed",
-        videoUrl: proxyUrl,
-        jobId: predictionId,
-      });
-    }
-
-    /* -----------------------------------------------------
-       STILL PROCESSING
-    ----------------------------------------------------- */
-
-    let hasGeneratingEvent = false;
-
-    for (const item of events) {
-      if (
-        item.event === "generating" ||
-        item.event === "process_starts" ||
-        item.event === "heartbeat"
-      ) {
-        hasGeneratingEvent = true;
+      if (!res.ok) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            "Failed to generate video."
+        );
       }
-    }
 
-    console.log(
-      "BOMBA WAN STILL PROCESSING:",
-      predictionId
-    );
+      /* ===============================================
+         VIDEO ALREADY AVAILABLE
+      =============================================== */
 
-    return NextResponse.json(
-      {
-        status: "processing",
-        message:
-          "Wan 2.2 is still generating the video.",
-        jobId: predictionId,
-        events: events.map((item) => item.event),
-        generating: hasGeneratingEvent,
-      },
-      { status: 202 }
-    );
-  } catch (error) {
-    clearTimeout(timeout);
+      if (data?.videoUrl) {
+        console.log(
+          "BOMBA DIRECT VIDEO URL:",
+          data.videoUrl
+        );
 
-    if (error?.name === "AbortError") {
-      console.log(
-        "BOMBA WAN RESULT CHECK TIMED OUT:",
-        predictionId
+        setVideoUrl(data.videoUrl);
+        setStatus("Video ready! 🎬");
+        setError("");
+        setLoading(false);
+
+        return;
+      }
+
+      /* ===============================================
+         JOB CREATED
+      =============================================== */
+
+      if (
+        data?.jobId ||
+        data?.predictionId ||
+        data?.eventId
+      ) {
+        const jobId =
+          data.jobId ||
+          data.predictionId ||
+          data.eventId;
+
+        console.log(
+          "BOMBA WAN JOB:",
+          jobId
+        );
+
+        setStatus(
+          "Wan 2.2 has started generating your video... 🎬"
+        );
+
+        /*
+          pollVideo is sequential.
+          It does NOT use setInterval.
+        */
+
+        await pollVideo(jobId);
+
+        return;
+      }
+
+      throw new Error(
+        "No video job or video URL returned."
+      );
+    } catch (err) {
+      console.error(
+        "BOMBA GENERATE ERROR:",
+        err
       );
 
-      /*
-        Timeout does NOT mean the generation failed.
-        The frontend will poll again.
-      */
-
-      return NextResponse.json(
-        {
-          status: "processing",
-          message:
-            "Wan 2.2 is still generating the video.",
-          jobId: predictionId,
-        },
-        { status: 202 }
+      setError(
+        err?.message ||
+          "Something went wrong while generating the video."
       );
+
+      setStatus("");
+      setLoading(false);
+    }
+  };
+
+  /* =====================================================
+     API KEY
+  ===================================================== */
+
+  const generateApiKey = async () => {
+    setApiMessage("");
+    setApiKey("");
+
+    if (!apiEmail.trim()) {
+      setApiMessage(
+        "Please enter your email address."
+      );
+      return;
     }
 
+    setApiLoading(true);
+
+    try {
+      const keyCode =
+        "bomba_" +
+        Math.random()
+          .toString(36)
+          .substring(2, 15);
+
+      const { data, error } =
+        await supabase
+          .from("bomba_keys")
+          .insert([
+            {
+              key_code: keyCode,
+              email: apiEmail.trim(),
+              videos_allowed: 20,
+              videos_used: 0,
+            },
+          ])
+          .select()
+          .single();
+
+      if (error) {
+        console.error(
+          "BOMBA API KEY ERROR:",
+          error
+        );
+
+        throw new Error(
+          error.message ||
+            "Unable to create API Key."
+        );
+      }
+
+      setApiKey(
+        data.key_code
+      );
+
+      setApiMessage(
+        "Your BOMBA API Key has been created successfully."
+      );
+    } catch (err) {
+      console.error(err);
+
+      setApiMessage(
+        err?.message ||
+          "Unable to create API Key. Please try again."
+      );
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const copyApiKey = async () => {
+    if (!apiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        apiKey
+      );
+
+      setApiMessage(
+        "API Key copied successfully! 📋"
+      );
+    } catch {
+      setApiMessage(
+        "Unable to copy automatically. Please copy the key manually."
+      );
+    }
+  };
+
+  /* =====================================================
+     VIDEO PLAYER ERROR
+  ===================================================== */
+
+  const handleVideoError = () => {
     console.error(
-      "BOMBA WAN GET ERROR:",
-      error
+      "BOMBA VIDEO PLAYER ERROR:",
+      videoUrl
     );
 
-    return NextResponse.json(
-      {
-        status: "failed",
-        error:
-          error?.message ||
-          "Unable to check Wan 2.2 video status.",
-        jobId: predictionId,
-      },
-      { status: 502 }
+    setError(
+      "The video was generated, but the browser could not play the returned video file."
     );
-  }
+  };
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <main className="studio">
+
+      {/* =================================================
+          TOP BAR
+      ================================================= */}
+
+      <header className="topbar">
+        <div>
+          <div className="brand">
+            BOMBA AI
+          </div>
+
+          <div className="subtitle">
+            VIDEO STUDIO
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setShowApiKey(true);
+              setApiMessage("");
+            }}
+            style={{
+              padding: "10px 14px",
+              borderRadius: "10px",
+              border:
+                "1px solid #FFD43B",
+              background:
+                "#FFD43B",
+              color: "#000",
+              fontWeight: "800",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            🔑 API KEY
+          </button>
+
+          <button
+            type="button"
+            className="profileButton"
+          >
+            TB
+          </button>
+        </div>
+      </header>
+
+      {/* =================================================
+          API KEY PANEL
+      ================================================= */}
+
+      {showApiKey && (
+        <section
+          style={{
+            margin: "20px auto",
+            width:
+              "calc(100% - 32px)",
+            maxWidth: "720px",
+            background:
+              "#111111",
+            border:
+              "1px solid #292929",
+            borderRadius: "18px",
+            padding: "24px",
+            boxSizing:
+              "border-box",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems:
+                "center",
+              gap: "12px",
+              marginBottom:
+                "12px",
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  color:
+                    "#ffffff",
+                }}
+              >
+                🔑 Get Your BOMBA API Key
+              </h2>
+
+              <p
+                style={{
+                  color:
+                    "#aaaaaa",
+                  lineHeight:
+                    "1.5",
+                  marginBottom:
+                    0,
+                }}
+              >
+                Enter your email address to generate
+                your BOMBA API Key.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowApiKey(false)
+              }
+              style={{
+                border:
+                  "1px solid #444",
+                background:
+                  "#080808",
+                color:
+                  "#ffffff",
+                borderRadius:
+                  "9px",
+                padding:
+                  "8px 12px",
+                cursor:
+                  "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <label
+            style={{
+              display:
+                "block",
+              color:
+                "#dddddd",
+              fontSize:
+                "14px",
+              marginBottom:
+                "8px",
+              marginTop:
+                "20px",
+            }}
+          >
+            Email Address
+          </label>
+
+          <input
+            type="email"
+            value={apiEmail}
+            onChange={(event) =>
+              setApiEmail(
+                event.target.value
+              )
+            }
+            placeholder="you@example.com"
+            disabled={
+              apiLoading
+            }
+            style={{
+              width: "100%",
+              boxSizing:
+                "border-box",
+              padding: "14px",
+              borderRadius:
+                "10px",
+              border:
+                "1px solid #333333",
+              background:
+                "#080808",
+              color:
+                "#ffffff",
+              fontSize:
+                "16px",
+              outline:
+                "none",
+              marginBottom:
+                "14px",
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={
+              generateApiKey
+            }
+            disabled={
+              apiLoading
+            }
+            style={{
+              width: "100%",
+              padding: "14px",
+              border:
+                "none",
+              borderRadius:
+                "10px",
+              background:
+                apiLoading
+                  ? "#8d7920"
+                  : "#FFD43B",
+              color:
+                "#000000",
+              fontWeight:
+                "800",
+              fontSize:
+                "15px",
+              cursor:
+                apiLoading
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          >
+            {apiLoading
+              ? "GENERATING..."
+              : "GENERATE API KEY"}
+          </button>
+
+          {apiKey && (
+            <div
+              style={{
+                marginTop:
+                  "18px",
+                padding:
+                  "16px",
+                borderRadius:
+                  "12px",
+                background:
+                  "#080808",
+                border:
+                  "1px solid #FFD43B",
+              }}
+            >
+              <div
+                style={{
+                  color:
+                    "#aaaaaa",
+                  fontSize:
+                    "12px",
+                  marginBottom:
+                    "8px",
+                }}
+              >
+                YOUR BOMBA API KEY
+              </div>
+
+              <div
+                style={{
+                  color:
+                    "#FFD43B",
+                  fontWeight:
+                    "700",
+                  wordBreak:
+                    "break-all",
+                  marginBottom:
+                    "12px",
+                }}
+              >
+                {apiKey}
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  copyApiKey
+                }
+                style={{
+                  width: "100%",
+                  padding:
+                    "12px",
+                  borderRadius:
+                    "9px",
+                  border:
+                    "1px solid #FFD43B",
+                  background:
+                    "transparent",
+                  color:
+                    "#FFD43B",
+                  fontWeight:
+                    "800",
+                  cursor:
+                    "pointer",
+                }}
+              >
+                📋 COPY API KEY
+              </button>
+            </div>
+          )}
+
+          {apiMessage && (
+            <div
+              style={{
+                marginTop:
+                  "14px",
+                padding:
+                  "11px",
+                borderRadius:
+                  "9px",
+                background:
+                  "#181818",
+                color:
+                  "#dddddd",
+                fontSize:
+                  "14px",
+                lineHeight:
+                  "1.5",
+              }}
+            >
+              {apiMessage}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* =================================================
+          HERO
+      ================================================= */}
+
+      <section className="hero">
+        <div className="badge">
+          AI VIDEO PRODUCTION STUDIO
+        </div>
+
+        <h1>
+          Turn your idea into a
+          <span>
+            {" "}
+            realistic AI video.
+          </span>
+        </h1>
+
+        <p>
+          Create characters, scenes, dialogue, voices,
+          sound and cinematic videos from one simple idea.
+        </p>
+      </section>
+
+      {/* =================================================
+          STUDIO CARD
+      ================================================= */}
+
+      <section className="studioCard">
+
+        <h2>
+          What do you want to create?
+        </h2>
+
+        <div className="modeGrid">
+          {modes.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={
+                mode === item
+                  ? "mode active"
+                  : "mode"
+              }
+              onClick={() =>
+                setMode(item)
+              }
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        {/* ===============================================
+            CHARACTER
+        =============================================== */}
+
+        <div className="characterUpload">
+
+          <div className="characterHeader">
+            <div>
+              <h3>
+                👤 Your Character
+              </h3>
+
+              <p>
+                Upload your photo to use yourself as the
+                main character.
+              </p>
+            </div>
+          </div>
+
+          {!characterImage ? (
+            <label className="uploadBox">
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={
+                  handleImageUpload
+                }
+                hidden
+              />
+
+              <div className="uploadIcon">
+                📸
+              </div>
+
+              <strong>
+                + Add Your Photo
+              </strong>
+
+              <span>
+                PNG, JPG or WEBP · Maximum 10MB
+              </span>
+
+            </label>
+          ) : (
+            <div className="characterPreview">
+
+              <img
+                src={characterImage}
+                alt="Your BOMBA character"
+              />
+
+              <div className="characterPreviewInfo">
+
+                <strong>
+                  ✅ Character Photo Added
+                </strong>
+
+                <span>
+                  This photo will be used as your
+                  character reference.
+                </span>
+
+                <div className="characterActions">
+
+                  <label className="changePhoto">
+
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={
+                        handleImageUpload
+                      }
+                      hidden
+                    />
+
+                    Change Photo
+                  </label>
+
+                  <button
+                    type="button"
+                    className="removePhoto"
+                    onClick={
+                      removeCharacterImage
+                    }
+                  >
+                    Remove
+                  </button>
+
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ===============================================
+            PROMPT
+        =============================================== */}
+
+        <div className="promptBox">
+
+          <label>
+            Describe your video
+          </label>
+
+          <textarea
+            value={prompt}
+            onChange={(e) =>
+              setPrompt(
+                e.target.value
+              )
+            }
+            placeholder="Example: I walk into a busy Nigerian market, meet my friend, shake hands with him and we laugh while people move naturally around us..."
+          />
+
+          <div className="promptFooter">
+
+            <span>
+              {prompt.length} characters
+            </span>
+
+            <button
+              type="button"
+              className="generateButton"
+              onClick={
+                handleGenerateVideo
+              }
+              disabled={
+                loading
+              }
+            >
+              {loading
+                ? "Generating..."
+                : "🎬 Generate Video"}
+            </button>
+
+          </div>
+        </div>
+
+        {/* ===============================================
+            STATUS
+        =============================================== */}
+
+        {status && (
+          <div
+            style={{
+              marginTop:
+                "16px",
+              color:
+                "#facc15",
+              fontSize:
+                "14px",
+            }}
+          >
+            {status}
+          </div>
+        )}
+
+        {/* ===============================================
+            ERROR
+        =============================================== */}
+
+        {error && (
+          <div
+            style={{
+              marginTop:
+                "12px",
+              padding:
+                "12px",
+              background:
+                "#3f1111",
+              border:
+                "1px solid #ef4444",
+              borderRadius:
+                "8px",
+              color:
+                "#fca5a5",
+              fontSize:
+                "14px",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* ===============================================
+            VIDEO RESULT
+        =============================================== */}
+
+        {videoUrl && (
+          <div
+            style={{
+              marginTop:
+                "24px",
+            }}
+          >
+            <h3
+              style={{
+                marginBottom:
+                  "12px",
+              }}
+            >
+              Your Realistic Video
+            </h3>
+
+            <video
+              key={videoUrl}
+              src={videoUrl}
+              controls
+              playsInline
+              preload="metadata"
+              onError={
+                handleVideoError
+              }
+              style={{
+                width:
+                  "100%",
+                borderRadius:
+                  "12px",
+                background:
+                  "#000",
+              }}
+            />
+
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display:
+                  "inline-block",
+                marginTop:
+                  "12px",
+                color:
+                  "#facc15",
+                textDecoration:
+                  "underline",
+              }}
+            >
+              Open Video
+            </a>
+
+            <div
+              style={{
+                marginTop:
+                  "8px",
+                color:
+                  "#888",
+                fontSize:
+                  "12px",
+              }}
+            >
+              If the video player does not start,
+              tap "Open Video" to test the returned file
+              directly.
+            </div>
+          </div>
+        )}
+
+      </section>
+
+      {/* =================================================
+          WORKFLOW
+      ================================================= */}
+
+      <section className="workflow">
+
+        <h2>
+          Production Workflow
+        </h2>
+
+        <div className="workflowGrid">
+
+          <div>
+            <strong>
+              01
+            </strong>
+
+            <h3>
+              Plan
+            </h3>
+
+            <p>
+              Turn your idea into scenes and shots.
+            </p>
+          </div>
+
+          <div>
+            <strong>
+              02
+            </strong>
+
+            <h3>
+              Characters
+            </h3>
+
+            <p>
+              Create consistent realistic characters.
+            </p>
+          </div>
+
+          <div>
+            <strong>
+              03
+            </strong>
+
+            <h3>
+              Scenes
+            </h3>
+
+            <p>
+              Build realistic locations and actions.
+            </p>
+          </div>
+
+          <div>
+            <strong>
+              04
+            </strong>
+
+            <h3>
+              Generate
+            </h3>
+
+            <p>
+              Generate cinematic video clips.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      {/* =================================================
+          FUTURE FEATURES
+      ================================================= */}
+
+      <section className="future">
+
+        <h2>
+          Coming into the Studio
+        </h2>
+
+        <div className="featureList">
+
+          <span>
+            🎭 Consistent Characters
+          </span>
+
+          <span>
+            🗣️ Natural Voices
+          </span>
+
+          <span>
+            👄 Lip Sync
+          </span>
+
+          <span>
+            🎬 Cinematic Camera
+          </span>
+
+          <span>
+            🔊 Sound Effects
+          </span>
+
+          <span>
+            🎵 Background Music
+          </span>
+
+          <span>
+            🏠 Realistic Environments
+          </span>
+
+          <span>
+            📺 Full Episodes
+          </span>
+
+        </div>
+      </section>
+
+    </main>
+  );
 }
