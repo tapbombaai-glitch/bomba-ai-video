@@ -70,20 +70,7 @@ function parseSSE(text) {
     }
 
     const rawData = dataLines.join("\n");
-
-    const parsedData =
-      parseJsonSafely(rawData);
-
-    /*
-      IMPORTANT:
-      Do NOT use:
-        parsedData ?? rawData
-
-      because JSON "null" would become the string "null"
-      and hide the fact that Wan actually returned null.
-
-      We keep both values separately.
-    */
+    const parsedData = parseJsonSafely(rawData);
 
     events.push({
       event: eventName,
@@ -100,10 +87,7 @@ function parseSSE(text) {
 ========================================================= */
 
 function extractErrorMessage(value) {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  if (value === null || value === undefined) {
     return null;
   }
 
@@ -123,8 +107,7 @@ function extractErrorMessage(value) {
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found =
-        extractErrorMessage(item);
+      const found = extractErrorMessage(item);
 
       if (found) {
         return found;
@@ -151,8 +134,9 @@ function extractErrorMessage(value) {
         value[key] !== null &&
         value[key] !== undefined
       ) {
-        const found =
-          extractErrorMessage(value[key]);
+        const found = extractErrorMessage(
+          value[key]
+        );
 
         if (found) {
           return found;
@@ -200,8 +184,7 @@ function extractVideoUrl(value) {
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found =
-        extractVideoUrl(item);
+      const found = extractVideoUrl(item);
 
       if (found) {
         return found;
@@ -227,8 +210,9 @@ function extractVideoUrl(value) {
 
     for (const key of possibleKeys) {
       if (value[key]) {
-        const found =
-          extractVideoUrl(value[key]);
+        const found = extractVideoUrl(
+          value[key]
+        );
 
         if (found) {
           return found;
@@ -246,21 +230,17 @@ function extractVideoUrl(value) {
 
 function findVideoInEvents(events) {
   for (const item of events) {
-    /*
-      First inspect parsed JSON.
-    */
-    const parsedVideo =
-      extractVideoUrl(item.parsedData);
+    const parsedVideo = extractVideoUrl(
+      item.parsedData
+    );
 
     if (parsedVideo) {
       return parsedVideo;
     }
 
-    /*
-      Then inspect raw event data.
-    */
-    const rawVideo =
-      extractVideoUrl(item.rawData);
+    const rawVideo = extractVideoUrl(
+      item.rawData
+    );
 
     if (rawVideo) {
       return rawVideo;
@@ -345,8 +325,7 @@ async function proxyVideo(videoUrl) {
 
 export async function POST(request) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const {
       prompt,
@@ -430,8 +409,7 @@ No sexual content.
     /* -----------------------------------------------------
        WAN INPUT
 
-       IMPORTANT:
-       Keep this exact input order.
+       KEEP THIS ORDER EXACTLY AS REQUIRED BY THE SPACE.
     ----------------------------------------------------- */
 
     const data = [
@@ -466,6 +444,11 @@ No sexual content.
     console.log(
       "Image type:",
       typeof imageData
+    );
+
+    console.log(
+      "Image length:",
+      imageData.length
     );
 
     console.log(
@@ -703,8 +686,12 @@ export async function GET(request) {
     new AbortController();
 
   /*
-    Keep this below the Vercel function limit.
-    The frontend polls again if still processing.
+    Give the Hugging Face Space enough time
+    to return its SSE result.
+
+    If it does not finish within 45 seconds,
+    return processing and let the frontend
+    poll again.
   */
 
   const timeout =
@@ -739,12 +726,6 @@ export async function GET(request) {
       "BOMBA WAN RESULT HTTP STATUS:",
       response.status
     );
-
-    /*
-      IMPORTANT:
-      Print the complete response so we can see
-      exactly what the Wan Space sends back.
-    */
 
     console.log(
       "BOMBA WAN FULL RESULT RESPONSE:",
@@ -895,10 +876,6 @@ export async function GET(request) {
           )
         );
 
-        /*
-          Try to find a real error message.
-        */
-
         const message =
           extractErrorMessage(
             item.parsedData
@@ -906,15 +883,6 @@ export async function GET(request) {
           extractErrorMessage(
             item.rawData
           );
-
-        /*
-          If Wan literally sends null,
-          DO NOT return "null".
-
-          Instead return a useful diagnostic
-          that tells us the event contains no
-          actual error message.
-        */
 
         const finalError =
           message ||
@@ -967,11 +935,6 @@ export async function GET(request) {
         "BOMBA WAN JOB COMPLETE:",
         predictionId
       );
-
-      /*
-        Return a BOMBA proxy URL instead of exposing
-        the temporary Hugging Face file directly.
-      */
 
       const baseUrl =
         new URL(
@@ -1056,11 +1019,6 @@ export async function GET(request) {
         "BOMBA WAN RESULT CHECK TIMED OUT:",
         predictionId
       );
-
-      /*
-        Timeout does NOT mean the generation failed.
-        The frontend will poll again.
-      */
 
       return NextResponse.json(
         {
