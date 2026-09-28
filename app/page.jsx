@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import PlanPanel from "./components/Plan/PlanPanel";
 
 export default function Home() {
 const [mode, setMode] = useState("Movie");
