@@ -56,28 +56,30 @@ export default function StudioBoard() {
 
   function getAudioContext() {
     if (typeof window === "undefined") {
-      return null;
+      throw new Error("Browser audio is unavailable.");
+    }
+
+    const AudioContextClass =
+      window.AudioContext ||
+      window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      throw new Error(
+        "This browser does not support Web Audio."
+      );
     }
 
     if (!audioContextRef.current) {
-      const AudioContext =
-        window.AudioContext || window.webkitAudioContext;
+      const context = new AudioContextClass();
 
-      if (!AudioContext) {
-        return null;
-      }
+      const gain = context.createGain();
 
-      audioContextRef.current = new AudioContext();
+      gain.gain.value = volume / 100;
 
-      masterGainRef.current =
-        audioContextRef.current.createGain();
+      gain.connect(context.destination);
 
-      masterGainRef.current.gain.value =
-        volume / 100;
-
-      masterGainRef.current.connect(
-        audioContextRef.current.destination
-      );
+      audioContextRef.current = context;
+      masterGainRef.current = gain;
     }
 
     return audioContextRef.current;
@@ -102,17 +104,15 @@ export default function StudioBoard() {
 
     activeNodesRef.current.forEach((node) => {
       try {
-        if (typeof node.stop === "function") {
-          node.stop();
-        }
+        node.stop();
       } catch {
-        // Node may already be stopped.
+        // Already stopped.
       }
 
       try {
         node.disconnect();
       } catch {
-        // Node may already be disconnected.
+        // Already disconnected.
       }
     });
 
@@ -121,13 +121,13 @@ export default function StudioBoard() {
     setIsPlaying(false);
   }
 
-  function createOscillator(
+  function makeTone(
     context,
     frequency,
     startTime,
     duration,
-    type = "sine",
-    gainAmount = 0.12
+    waveform,
+    level
   ) {
     const oscillator =
       context.createOscillator();
@@ -135,7 +135,8 @@ export default function StudioBoard() {
     const gain =
       context.createGain();
 
-    oscillator.type = type;
+    oscillator.type = waveform;
+
     oscillator.frequency.setValueAtTime(
       frequency,
       startTime
@@ -147,8 +148,8 @@ export default function StudioBoard() {
     );
 
     gain.gain.linearRampToValueAtTime(
-      gainAmount,
-      startTime + 0.08
+      level,
+      startTime + 0.05
     );
 
     gain.gain.linearRampToValueAtTime(
@@ -160,37 +161,32 @@ export default function StudioBoard() {
     gain.connect(masterGainRef.current);
 
     oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.05);
+    oscillator.stop(
+      startTime + duration + 0.05
+    );
 
     activeNodesRef.current.push(
       oscillator
     );
-
-    return oscillator;
   }
 
-  function createNoise(
+  function makeNoise(
     context,
     startTime,
     duration,
-    filterType,
-    frequency,
-    gainAmount
+    level
   ) {
-    const bufferSize =
-      context.sampleRate * duration;
-
     const buffer =
       context.createBuffer(
         1,
-        bufferSize,
+        context.sampleRate * duration,
         context.sampleRate
       );
 
     const data =
       buffer.getChannelData(0);
 
-    for (let i = 0; i < bufferSize; i++) {
+    for (let i = 0; i < data.length; i++) {
       data[i] =
         Math.random() * 2 - 1;
     }
@@ -206,11 +202,8 @@ export default function StudioBoard() {
 
     source.buffer = buffer;
 
-    filter.type = filterType;
-    filter.frequency.setValueAtTime(
-      frequency,
-      startTime
-    );
+    filter.type = "lowpass";
+    filter.frequency.value = 1200;
 
     gain.gain.setValueAtTime(
       0,
@@ -218,8 +211,8 @@ export default function StudioBoard() {
     );
 
     gain.gain.linearRampToValueAtTime(
-      gainAmount,
-      startTime + 0.15
+      level,
+      startTime + 0.2
     );
 
     gain.gain.linearRampToValueAtTime(
@@ -234,58 +227,51 @@ export default function StudioBoard() {
     source.start(startTime);
     source.stop(startTime + duration);
 
-    activeNodesRef.current.push(
-      source
-    );
-
-    return source;
+    activeNodesRef.current.push(source);
   }
 
   function createBackgroundMusic(context) {
-    const start = context.currentTime + 0.05;
-    const duration = 18;
+    const start =
+      context.currentTime + 0.05;
 
-    const chords = [
-      [261.63, 329.63, 392.0],
-      [220.0, 261.63, 329.63],
-      [174.61, 220.0, 261.63],
-      [196.0, 246.94, 293.66],
+    const notes = [
+      261.63,
+      329.63,
+      392.0,
+      329.63,
+      293.66,
+      349.23,
+      440.0,
+      349.23,
+      261.63,
+      329.63,
+      392.0,
+      523.25,
+      392.0,
+      329.63,
+      293.66,
+      261.63,
+      329.63,
+      392.0,
     ];
 
-    for (let i = 0; i < 12; i++) {
-      const chord =
-        chords[i % chords.length];
-
-      const chordStart =
-        start + i * 1.5;
-
-      chord.forEach((frequency, index) => {
-        createOscillator(
-          context,
-          frequency,
-          chordStart,
-          1.35,
-          "sine",
-          index === 0 ? 0.08 : 0.045
-        );
-      });
-    }
-
-    for (let i = 0; i < 18; i++) {
-      const melodyNotes = [
-        523.25,
-        587.33,
-        659.25,
-        783.99,
-        659.25,
-        587.33,
-      ];
-
-      createOscillator(
+    notes.forEach((frequency, index) => {
+      makeTone(
         context,
-        melodyNotes[i % melodyNotes.length],
-        start + i,
-        0.65,
+        frequency,
+        start + index,
+        0.8,
+        "sine",
+        0.08
+      );
+    });
+
+    for (let i = 0; i < 9; i++) {
+      makeTone(
+        context,
+        130.81,
+        start + i * 2,
+        1.6,
         "triangle",
         0.035
       );
@@ -293,61 +279,47 @@ export default function StudioBoard() {
   }
 
   function createSoundEffects(context) {
-    const start = context.currentTime + 0.05;
+    const start =
+      context.currentTime + 0.05;
 
-    for (let i = 0; i < 6; i++) {
-      const hitStart =
-        start + i * 2.8;
+    for (let i = 0; i < 7; i++) {
+      const time =
+        start + i * 2.5;
 
-      createOscillator(
+      makeTone(
         context,
-        120 + i * 35,
-        hitStart,
+        100 + i * 45,
+        time,
         0.18,
         "square",
-        0.12
+        0.16
       );
 
-      createNoise(
+      makeNoise(
         context,
-        hitStart,
+        time,
         0.35,
-        "highpass",
-        900,
         0.08
-      );
-
-      createOscillator(
-        context,
-        70,
-        hitStart + 0.08,
-        0.4,
-        "sine",
-        0.07
       );
     }
   }
 
   function createEnvironment(context) {
-    const start = context.currentTime + 0.05;
+    const start =
+      context.currentTime + 0.05;
 
-    createNoise(
+    makeNoise(
       context,
       start,
       18,
-      "lowpass",
-      900,
       0.12
     );
 
     for (let i = 0; i < 18; i++) {
-      const dropStart =
-        start + i * 1.0;
-
-      createOscillator(
+      makeTone(
         context,
-        900 + (i % 4) * 120,
-        dropStart,
+        700 + (i % 5) * 90,
+        start + i,
         0.12,
         "sine",
         0.025
@@ -362,17 +334,11 @@ export default function StudioBoard() {
       return;
     }
 
-    const context =
-      getAudioContext();
-
-    if (!context) {
-      setSoundStatus(
-        "Your browser does not support Web Audio."
-      );
-      return;
-    }
+    setSoundStatus("Starting sound...");
 
     try {
+      const context = getAudioContext();
+
       if (context.state === "suspended") {
         await context.resume();
       }
@@ -381,20 +347,16 @@ export default function StudioBoard() {
 
       if (soundType === "Background Music") {
         createBackgroundMusic(context);
-      }
-
-      if (soundType === "Sound Effects") {
+      } else if (soundType === "Sound Effects") {
         createSoundEffects(context);
-      }
-
-      if (soundType === "Environment") {
+      } else if (soundType === "Environment") {
         createEnvironment(context);
       }
 
       setIsPlaying(true);
 
       setSoundStatus(
-        `${soundType} test is playing for about 18 seconds.`
+        `${soundType} is playing.`
       );
 
       stopTimerRef.current =
@@ -402,24 +364,31 @@ export default function StudioBoard() {
           activeNodesRef.current = [];
           setIsPlaying(false);
           setSoundStatus(
-            "Sound test finished. Ready again."
+            "Sound finished. Ready again."
           );
-        }, 18500);
+        }, 18000);
     } catch (error) {
       console.error(
-        "BOMBA TEST SOUND ERROR:",
+        "BOMBA SOUND TEST ERROR:",
         error
       );
 
+      setIsPlaying(false);
+
       setSoundStatus(
-        "Unable to play test sound."
+        `Audio error: ${
+          error?.message ||
+          "Unable to play sound."
+        }`
       );
     }
   }
 
   function selectSound(type) {
     stopSound();
+
     setSoundType(type);
+
     setSoundStatus(
       `${type} selected. Press PREVIEW SOUND.`
     );
@@ -430,9 +399,11 @@ export default function StudioBoard() {
       style={{
         marginTop: "24px",
         padding: "14px",
-        border: "1px solid rgba(255,255,255,0.10)",
+        border:
+          "1px solid rgba(255,255,255,0.10)",
         borderRadius: "14px",
-        background: "rgba(255,255,255,0.025)",
+        background:
+          "rgba(255,255,255,0.025)",
       }}
     >
       <div style={{ marginBottom: "12px" }}>
@@ -762,7 +733,7 @@ export default function StudioBoard() {
               textAlign: "center",
               fontSize: "9px",
               lineHeight: 1.5,
-              opacity: 0.55,
+              opacity: 0.65,
             }}
           >
             {soundStatus}
