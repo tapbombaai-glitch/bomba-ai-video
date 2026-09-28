@@ -1,138 +1,531 @@
-"use client";
+import { NextResponse } from "next/server";
 
-import { useState } from "react";
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export default function PlanPanel({ idea = "", onPlanChange }) {
-  const [story, setStory] = useState("");
-  const [characters, setCharacters] = useState("");
-  const [scenes, setScenes] = useState("");
-  const [shots, setShots] = useState("");
+const WAN_API_URL =
+"https://observantdistressed-wan2-2-i2v-v3.hf.space/gradio_api/call/generate_video";
 
-  const updatePlan = (field, value) => {
-    const plan = {
-      idea,
-      story,
-      characters,
-      scenes,
-      shots,
-      [field]: value,
-    };
+const DEFAULT_NEGATIVE_PROMPT =
+"blurry, low quality, distorted face, deformed body, extra fingers, extra limbs, bad anatomy, unrealistic movement, flickering, duplicate person, duplicate body, text, watermark, logo, nudity, sexual content";
 
-    onPlanChange?.(plan);
-  };
+function toGradioImage(image) {
+if (!image) return null;
 
-  return (
-    <section className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
-      <div className="mb-6">
-        <div className="mb-2 text-xs font-semibold tracking-[0.25em] text-yellow-400">
-          STUDIO PLAN
-        </div>
-
-        <h2 className="text-2xl font-bold text-white">
-          Plan your video
-        </h2>
-
-        <p className="mt-2 text-sm leading-6 text-white/60">
-          Turn your idea into a clear story, characters, scenes and shots
-          before generating the video.
-        </p>
-      </div>
-
-      <div className="space-y-5">
-        {/* IDEA */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-white">
-            1. Idea
-          </label>
-
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
-            {idea || "Your video idea will appear here."}
-          </div>
-        </div>
-
-        {/* STORY */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-white">
-            2. Story
-          </label>
-
-          <textarea
-            value={story}
-            onChange={(e) => {
-              setStory(e.target.value);
-              updatePlan("story", e.target.value);
-            }}
-            placeholder="Describe what happens in the story..."
-            rows={4}
-            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-yellow-400/50"
-          />
-        </div>
-
-        {/* CHARACTERS */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-white">
-            3. Characters
-          </label>
-
-          <textarea
-            value={characters}
-            onChange={(e) => {
-              setCharacters(e.target.value);
-              updatePlan("characters", e.target.value);
-            }}
-            placeholder="Who appears in the video? Describe their appearance and role..."
-            rows={4}
-            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-yellow-400/50"
-          />
-        </div>
-
-        {/* SCENES */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-white">
-            4. Scenes
-          </label>
-
-          <textarea
-            value={scenes}
-            onChange={(e) => {
-              setScenes(e.target.value);
-              updatePlan("scenes", e.target.value);
-            }}
-            placeholder="Describe the locations, actions and important moments..."
-            rows={4}
-            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-yellow-400/50"
-          />
-        </div>
-
-        {/* SHOTS */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-white">
-            5. Shots
-          </label>
-
-          <textarea
-            value={shots}
-            onChange={(e) => {
-              setShots(e.target.value);
-              updatePlan("shots", e.target.value);
-            }}
-            placeholder="Describe camera angles, movement and important shots..."
-            rows={4}
-            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-yellow-400/50"
-          />
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-4">
-        <div className="text-sm font-semibold text-yellow-400">
-          Next step
-        </div>
-
-        <p className="mt-1 text-sm leading-6 text-white/60">
-          Later, BOMBA AI will be connected here to turn your idea into the
-          story, characters, scenes and shots automatically.
-        </p>
-      </div>
-    </section>
-  );
+if (
+typeof image === "object" &&
+(image.url || image.path)
+) {
+return image;
 }
+
+const isData =
+typeof image === "string" &&
+image.startsWith("data:");
+
+return {
+path: null,
+url: image,
+size: null,
+orig_name: "bomba-input.jpg",
+mime_type: isData
+? image.substring(5, image.indexOf(";")) || "image/jpeg"
+: "image/jpeg",
+is_stream: false,
+meta: {
+_type: "gradio.FileData",
+},
+};
+}
+
+function safeJson(text) {
+try {
+return JSON.parse(text);
+} catch {
+return null;
+}
+}
+
+function extractError(value) {
+if (!value) return null;
+
+if (typeof value === "string") {
+return value;
+}
+
+if (value.error) {
+if (typeof value.error === "string") {
+return value.error;
+}
+
+try {  
+  return JSON.stringify(value.error);  
+} catch {  
+  return "Unknown Wan error";  
+}
+
+}
+
+if (value.message) {
+return value.message;
+}
+
+if (value.detail) {
+return typeof value.detail === "string"
+? value.detail
+: JSON.stringify(value.detail);
+}
+
+return null;
+}
+
+function extractVideoUrl(value) {
+if (!value) return null;
+
+if (typeof value === "string") {
+if (
+value.startsWith("http://") ||
+value.startsWith("https://")
+) {
+return value;
+}
+
+return null;
+
+}
+
+if (Array.isArray(value)) {
+for (const item of value) {
+const found = extractVideoUrl(item);
+
+if (found) {  
+    return found;  
+  }  
+}  
+
+return null;
+
+}
+
+if (typeof value === "object") {
+const directKeys = [
+"video",
+"video_url",
+"url",
+"output",
+"path",
+"value",
+];
+
+for (const key of directKeys) {  
+  if (value[key]) {  
+    const found = extractVideoUrl(value[key]);  
+
+    if (found) {  
+      return found;  
+    }  
+  }  
+}  
+
+if (Array.isArray(value.data)) {  
+  const found = extractVideoUrl(value.data);  
+
+  if (found) {  
+    return found;  
+  }  
+}
+
+}
+
+return null;
+}
+
+async function proxyVideo(videoUrl) {
+const response = await fetch(videoUrl);
+
+if (!response.ok) {
+throw new Error(
+Unable to download generated video (${response.status}).
+);
+}
+
+const contentType =
+response.headers.get("content-type") ||
+"video/mp4";
+
+const contentLength =
+response.headers.get("content-length");
+
+const buffer = await response.arrayBuffer();
+
+return new NextResponse(buffer, {
+status: 200,
+headers: {
+"Content-Type": contentType,
+...(contentLength
+? {
+"Content-Length": contentLength,
+}
+: {}),
+"Cache-Control":
+"public, max-age=31536000, immutable",
+},
+});
+}
+
+export async function POST(request) {
+try {
+const body = await request.json();
+
+const imageData =  
+  body.imageData ||  
+  body.image ||  
+  body.characterImage;  
+
+const prompt =  
+  body.prompt ||  
+  "A realistic cinematic scene with natural human movement.";  
+
+const mode =  
+  body.mode ||  
+  "Movie";  
+
+if (!imageData) {  
+  return NextResponse.json(  
+    {  
+      error: "Character image is required.",  
+    },  
+    {  
+      status: 400,  
+    }  
+  );  
+}  
+
+const gradioImage =  
+  toGradioImage(imageData);  
+
+console.log(  
+  "BOMBA WAN IMAGE TYPE:",  
+  typeof imageData  
+);  
+
+console.log(  
+  "BOMBA WAN GRADIO IMAGE:",  
+  JSON.stringify(gradioImage)  
+);  
+
+const finalPrompt = `
+
+${prompt}
+
+Mode: ${mode}.
+
+Create a realistic cinematic live-action video.
+
+Natural human movement.
+Realistic facial expressions.
+Realistic body proportions.
+Realistic lighting.
+Gentle cinematic camera movement.
+Detailed environment.
+Realistic skin texture.
+Realistic clothing.
+Natural atmosphere.
+Photorealistic appearance.
+Smooth motion.
+Consistent character appearance.
+`.trim();
+
+// Wan generation parameters.  
+// The duration value is 5 seconds.  
+const data = [  
+  gradioImage,  
+  null,  
+  finalPrompt,  
+  6,  
+  DEFAULT_NEGATIVE_PROMPT,  
+  5,  
+  1,  
+  1,  
+  0,  
+  true,  
+  6,  
+  "UniPCMultistep",  
+  6.0,  
+  16,  
+  true,  
+  [],  
+  false,  
+  true,  
+];  
+
+console.log(  
+  "BOMBA WAN DATA:",  
+  JSON.stringify(data)  
+);  
+
+const response = await fetch(WAN_API_URL, {  
+  method: "POST",  
+  headers: {  
+    "Content-Type": "application/json",  
+  },  
+  body: JSON.stringify({  
+    data,  
+  }),  
+});  
+
+const responseText =  
+  await response.text();  
+
+console.log(  
+  "BOMBA WAN POST STATUS:",  
+  response.status  
+);  
+
+console.log(  
+  "BOMBA WAN POST RESPONSE:",  
+  responseText  
+);  
+
+if (!response.ok) {  
+  return NextResponse.json(  
+    {  
+      status: "failed",  
+      error:  
+        extractError(  
+          safeJson(responseText)  
+        ) ||  
+        responseText ||  
+        `Wan request failed with status ${response.status}.`,  
+    },  
+    {  
+      status: 502,  
+    }  
+  );  
+}  
+
+const parsed =  
+  safeJson(responseText);  
+
+const predictionId =  
+  parsed?.event_id ||  
+  parsed?.id ||  
+  parsed?.job_id ||  
+  parsed?.jobId;  
+
+console.log(  
+  "BOMBA WAN EVENT ID:",  
+  predictionId  
+);  
+
+if (!predictionId) {  
+  return NextResponse.json(  
+    {  
+      status: "failed",  
+      error:  
+        "Wan did not return an event ID.",  
+      rawWanResponse:  
+        responseText,  
+    },  
+    {  
+      status: 502,  
+    }  
+  );  
+}  
+
+return NextResponse.json({  
+  status: "queued",  
+  id: predictionId,  
+  jobId: predictionId,  
+  predictionId,  
+});
+
+} catch (error) {
+console.error(
+"BOMBA WAN POST ERROR:",
+error
+);
+
+return NextResponse.json(  
+  {  
+    status: "failed",  
+    error:  
+      error?.message ||  
+      "Unable to start Wan video generation.",  
+  },  
+  {  
+    status: 500,  
+  }  
+);
+
+}
+}
+
+export async function GET(request) {
+const { searchParams } =
+new URL(request.url);
+
+const predictionId =
+searchParams.get("id") ||
+searchParams.get("jobId") ||
+searchParams.get("predictionId");
+
+if (!predictionId) {
+return NextResponse.json(
+{
+status: "failed",
+error:
+"Missing generation ID.",
+},
+{
+status: 400,
+}
+);
+}
+
+console.log(
+"BOMBA WAN CHECK ID:",
+predictionId
+);
+
+try {
+const response = await fetch(
+${WAN_API_URL}/${encodeURIComponent(   predictionId   )},
+{
+method: "GET",
+headers: {
+Accept: "text/event-stream",
+},
+cache: "no-store",
+}
+);
+
+const responseText =  
+  await response.text();  
+
+console.log(  
+  "BOMBA WAN RESULT RESPONSE:",  
+  responseText  
+);  
+
+if (!response.ok) {  
+  return NextResponse.json(  
+    {  
+      status: "failed",  
+      error:  
+        `Wan status request failed with status ${response.status}.`,  
+      rawWanResponse:  
+        responseText,  
+      jobId: predictionId,  
+    },  
+    {  
+      status: 502,  
+    }  
+  );  
+}  
+
+console.log(  
+  "BOMBA WAN EVENTS:",  
+  responseText  
+);  
+
+const lines =  
+  responseText.split("\n");  
+
+for (  
+  let i = 0;  
+  i < lines.length;  
+  i++  
+) {  
+  const line =  
+    lines[i].trim();  
+
+  if (!line.startsWith("data:")) {  
+    continue;  
+  }  
+
+  const rawData =  
+    line.slice(5).trim();  
+
+  if (!rawData) {  
+    continue;  
+  }  
+
+  const parsed =  
+    safeJson(rawData);  
+
+  console.log(  
+    "BOMBA WAN EVENT PARSED:",  
+    JSON.stringify(parsed)  
+  );  
+
+  const eventError =  
+    extractError(parsed);  
+
+  if (eventError) {  
+    console.error(  
+      "BOMBA WAN ERROR EVENT:",  
+      eventError  
+    );  
+
+    return NextResponse.json(  
+      {  
+        status: "failed",  
+        error: eventError,  
+        rawWanError: rawData,  
+        parsedWanError: parsed,  
+        rawWanResponse:  
+          responseText,  
+        jobId: predictionId,  
+      },  
+      {  
+        status: 502,  
+      }  
+    );  
+  }  
+
+  const videoUrl =  
+    extractVideoUrl(parsed);  
+
+  if (videoUrl) {  
+    console.log(  
+      "BOMBA WAN RESULT URL:",  
+      videoUrl  
+    );  
+
+    return proxyVideo(videoUrl);  
+  }  
+}  
+
+return NextResponse.json({  
+  status: "processing",  
+  id: predictionId,  
+  jobId: predictionId,  
+  predictionId,  
+});
+
+} catch (error) {
+console.error(
+"BOMBA WAN GET ERROR:",
+error
+);
+
+return NextResponse.json(  
+  {  
+    status: "failed",  
+    error:  
+      error?.message ||  
+      "Unable to check Wan generation.",  
+    jobId: predictionId,  
+  },  
+  {  
+    status: 502,  
+  }  
+);
+
+}
+}
+
+Path: "app/api/video/generate/route.js" (or the same path where your current file lives).
+
+But important: this does not solve the 0.04-second output yet. It preserves the 5-second setting because that's already present. After deploying this, the next file we should inspect is the frontend Generate Video code, because that's where we can verify how the returned video is being handled.
