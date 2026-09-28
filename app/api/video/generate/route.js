@@ -23,6 +23,53 @@ function parseJsonSafely(value) {
   }
 }
 
+/*
+  Convert the image received from the frontend into
+  the Gradio FileData format expected by Wan 2.2.
+*/
+function toGradioImage(image) {
+  if (!image) {
+    return null;
+  }
+
+  // Already a Gradio FileData-style object
+  if (
+    typeof image === "object" &&
+    (image.url || image.path)
+  ) {
+    return image;
+  }
+
+  // Image received as a data URL or normal URL
+  if (typeof image === "string") {
+    const isDataUrl = image.startsWith("data:");
+
+    let mimeType = "image/jpeg";
+
+    if (isDataUrl) {
+      const match = image.match(/^data:([^;]+);base64,/i);
+
+      if (match?.[1]) {
+        mimeType = match[1];
+      }
+    }
+
+    return {
+      path: null,
+      url: image,
+      size: null,
+      orig_name: "bomba-input.jpg",
+      mime_type: mimeType,
+      is_stream: false,
+      meta: {
+        _type: "gradio.FileData",
+      },
+    };
+  }
+
+  return null;
+}
+
 function parseSSE(text) {
   const events = [];
   let currentEvent = null;
@@ -31,7 +78,9 @@ function parseSSE(text) {
   const lines = text.split(/\r?\n/);
 
   function pushEvent() {
-    if (!currentEvent && currentData.length === 0) return;
+    if (!currentEvent && currentData.length === 0) {
+      return;
+    }
 
     const rawData = currentData.join("\n");
 
@@ -98,7 +147,9 @@ function extractErrorMessage(value) {
 }
 
 function extractVideoUrl(value) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   if (typeof value === "string") {
     if (
@@ -114,7 +165,10 @@ function extractVideoUrl(value) {
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = extractVideoUrl(item);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
 
     return null;
@@ -133,7 +187,10 @@ function extractVideoUrl(value) {
 
     for (const key of possibleKeys) {
       const found = extractVideoUrl(value[key]);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
   }
 
@@ -156,8 +213,14 @@ async function getImageData(request) {
   const body = await request.json();
 
   return {
-    imageData: body?.imageData || body?.image || body?.characterImage || null,
+    imageData:
+      body?.imageData ||
+      body?.image ||
+      body?.characterImage ||
+      null,
+
     prompt: body?.prompt || "",
+
     mode: body?.mode || "Story",
   };
 }
@@ -183,6 +246,7 @@ async function proxyVideo(videoUrl) {
 
     return new NextResponse(arrayBuffer, {
       status: 200,
+
       headers: {
         "Content-Type": contentType,
         "Content-Length": String(arrayBuffer.byteLength),
@@ -204,7 +268,8 @@ async function proxyVideo(videoUrl) {
 
 export async function POST(request) {
   try {
-    const { imageData, prompt, mode } = await getImageData(request);
+    const { imageData, prompt, mode } =
+      await getImageData(request);
 
     if (!imageData) {
       return NextResponse.json(
@@ -220,7 +285,24 @@ export async function POST(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "Please describe the video you want to create.",
+          error:
+            "Please describe the video you want to create.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+      Convert the frontend image into Gradio FileData.
+    */
+    const gradioImage = toGradioImage(imageData);
+
+    if (!gradioImage) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "The uploaded character image could not be prepared for Wan 2.2.",
         },
         { status: 400 }
       );
@@ -254,7 +336,7 @@ Cinematic realistic live-action style, natural human movement, realistic facial 
     */
 
     const data = [
-      imageData,
+      gradioImage,
       null,
       finalPrompt,
       6,
@@ -274,22 +356,50 @@ Cinematic realistic live-action style, natural human movement, realistic facial 
       true,
     ];
 
-    console.log("BOMBA WAN REQUEST MODE:", mode);
-    console.log("BOMBA WAN DATA:", JSON.stringify(data));
-    console.log("BOMBA WAN FLOW SHIFT:", 6.0);
-    console.log("BOMBA WAN LAST IMAGE:", null);
+    console.log(
+      "BOMBA WAN REQUEST MODE:",
+      mode
+    );
+
+    console.log(
+      "BOMBA WAN IMAGE TYPE:",
+      typeof imageData
+    );
+
+    console.log(
+      "BOMBA WAN GRADIO IMAGE:",
+      JSON.stringify(gradioImage)
+    );
+
+    console.log(
+      "BOMBA WAN DATA:",
+      JSON.stringify(data)
+    );
+
+    console.log(
+      "BOMBA WAN FLOW SHIFT:",
+      6.0
+    );
+
+    console.log(
+      "BOMBA WAN LAST IMAGE:",
+      null
+    );
 
     const response = await fetch(WAN_API_URL, {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
       },
+
       body: JSON.stringify({
         data,
       }),
     });
 
-    const responseText = await response.text();
+    const responseText =
+      await response.text();
 
     console.log(
       "BOMBA WAN START RESPONSE:",
@@ -300,14 +410,16 @@ Cinematic realistic live-action style, natural human movement, realistic facial 
       return NextResponse.json(
         {
           status: "failed",
-          error: "Wan 2.2 could not start the video generation.",
+          error:
+            "Wan 2.2 could not start the video generation.",
           rawWanResponse: responseText,
         },
         { status: 502 }
       );
     }
 
-    const startData = parseJsonSafely(responseText);
+    const startData =
+      parseJsonSafely(responseText);
 
     const predictionId =
       startData?.event_id ||
@@ -318,22 +430,30 @@ Cinematic realistic live-action style, natural human movement, realistic facial 
       return NextResponse.json(
         {
           status: "failed",
-          error: "Wan 2.2 did not return a generation ID.",
+          error:
+            "Wan 2.2 did not return a generation ID.",
           rawWanResponse: responseText,
         },
         { status: 502 }
       );
     }
 
-    console.log("BOMBA WAN EVENT ID:", predictionId);
+    console.log(
+      "BOMBA WAN EVENT ID:",
+      predictionId
+    );
 
     return NextResponse.json({
       status: "queued",
       id: predictionId,
       jobId: predictionId,
+      predictionId: predictionId,
     });
   } catch (error) {
-    console.error("BOMBA WAN POST ERROR:", error);
+    console.error(
+      "BOMBA WAN POST ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -349,11 +469,13 @@ Cinematic realistic live-action style, natural human movement, realistic facial 
 
 export async function GET(request) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } =
+      new URL(request.url);
 
     const predictionId =
       searchParams.get("id") ||
-      searchParams.get("jobId");
+      searchParams.get("jobId") ||
+      searchParams.get("predictionId");
 
     if (!predictionId) {
       return NextResponse.json(
@@ -365,17 +487,36 @@ export async function GET(request) {
       );
     }
 
-    const resultUrl = `${WAN_API_URL}/${predictionId}`;
+    const resultUrl =
+      `${WAN_API_URL}/${encodeURIComponent(
+        predictionId
+      )}`;
 
-    const response = await fetch(resultUrl, {
-      method: "GET",
-      headers: {
-        Accept: "text/event-stream",
-      },
-      cache: "no-store",
-    });
+    console.log(
+      "BOMBA WAN CHECK ID:",
+      predictionId
+    );
 
-    const responseText = await response.text();
+    console.log(
+      "BOMBA WAN RESULT URL:",
+      resultUrl
+    );
+
+    const response = await fetch(
+      resultUrl,
+      {
+        method: "GET",
+
+        headers: {
+          Accept: "text/event-stream",
+        },
+
+        cache: "no-store",
+      }
+    );
+
+    const responseText =
+      await response.text();
 
     console.log(
       "BOMBA WAN RESULT RESPONSE:",
@@ -386,7 +527,8 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error: `Wan 2.2 result request failed with HTTP ${response.status}.`,
+          error:
+            `Wan 2.2 result request failed with HTTP ${response.status}.`,
           rawWanResponse: responseText,
           jobId: predictionId,
         },
@@ -394,11 +536,15 @@ export async function GET(request) {
       );
     }
 
-    const events = parseSSE(responseText);
+    const events =
+      parseSSE(responseText);
 
     console.log(
       "BOMBA WAN EVENTS:",
-      JSON.stringify(events).slice(0, 12000)
+      JSON.stringify(events).slice(
+        0,
+        12000
+      )
     );
 
     for (const event of events) {
@@ -408,21 +554,28 @@ export async function GET(request) {
         "RAW:",
         event.rawData,
         "PARSED:",
-        JSON.stringify(event.parsedData)
+        JSON.stringify(
+          event.parsedData
+        )
       );
     }
 
-    const errorEvent = events.find(
-      (event) =>
-        event.event === "error" ||
-        event.event === "failed" ||
-        event.event === "failure"
-    );
+    const errorEvent =
+      events.find(
+        (event) =>
+          event.event === "error" ||
+          event.event === "failed" ||
+          event.event === "failure"
+      );
 
     if (errorEvent) {
       const errorMessage =
-        extractErrorMessage(errorEvent.parsedData) ||
-        extractErrorMessage(errorEvent.rawData);
+        extractErrorMessage(
+          errorEvent.parsedData
+        ) ||
+        extractErrorMessage(
+          errorEvent.rawData
+        );
 
       console.error(
         "BOMBA WAN ERROR EVENT RAW:",
@@ -431,54 +584,89 @@ export async function GET(request) {
 
       console.error(
         "BOMBA WAN ERROR EVENT PARSED:",
-        JSON.stringify(errorEvent.parsedData)
+        JSON.stringify(
+          errorEvent.parsedData
+        )
       );
 
       return NextResponse.json(
         {
           status: "failed",
+
           error:
             errorMessage ||
             "Wan 2.2 returned an error event without an error message.",
-          rawWanError: errorEvent.rawData,
-          parsedWanError: errorEvent.parsedData,
-          rawWanResponse: responseText,
+
+          rawWanError:
+            errorEvent.rawData,
+
+          parsedWanError:
+            errorEvent.parsedData,
+
+          rawWanResponse:
+            responseText,
+
           jobId: predictionId,
         },
+
         { status: 502 }
       );
     }
 
-    const videoUrl = findVideoInEvents(events);
+    const videoUrl =
+      findVideoInEvents(events);
 
     if (videoUrl) {
-      console.log("BOMBA WAN VIDEO URL:", videoUrl);
+      console.log(
+        "BOMBA WAN VIDEO URL:",
+        videoUrl
+      );
 
-      return proxyVideo(videoUrl);
+      return proxyVideo(
+        videoUrl
+      );
     }
 
-    const hasProcessingEvent = events.some(
-      (event) =>
-        event.event === "generating" ||
-        event.event === "process_generating" ||
-        event.event === "process_starts" ||
-        event.event === "process_completed" ||
-        event.event === "queue_full"
-    );
+    const hasProcessingEvent =
+      events.some(
+        (event) =>
+          event.event === "generating" ||
+          event.event ===
+            "process_generating" ||
+          event.event ===
+            "process_starts" ||
+          event.event ===
+            "process_completed" ||
+          event.event ===
+            "queue_full"
+      );
 
     if (hasProcessingEvent) {
       return NextResponse.json({
         status: "processing",
         jobId: predictionId,
+        id: predictionId,
+        predictionId: predictionId,
       });
     }
 
+    /*
+      If Wan has not returned a video or
+      explicit failure, keep the job in
+      processing state so the frontend
+      can poll again.
+    */
     return NextResponse.json({
       status: "processing",
       jobId: predictionId,
+      id: predictionId,
+      predictionId: predictionId,
     });
   } catch (error) {
-    console.error("BOMBA WAN GET ERROR:", error);
+    console.error(
+      "BOMBA WAN GET ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
