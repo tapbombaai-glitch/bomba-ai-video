@@ -9,6 +9,8 @@ const WAN_API_URL =
 const DEFAULT_NEGATIVE_PROMPT =
   "blurry, low quality, distorted face, deformed body, extra fingers, extra limbs, bad anatomy, unrealistic movement, flickering, duplicate person, duplicate body, text, watermark, logo, nudity, sexual content";
 
+const POLL_TIMEOUT_MS = 25000;
+
 function toGradioImage(image) {
   if (!image) return null;
 
@@ -29,7 +31,8 @@ function toGradioImage(image) {
     size: null,
     orig_name: "bomba-input.jpg",
     mime_type: isData
-      ? image.substring(5, image.indexOf(";")) || "image/jpeg"
+      ? image.substring(5, image.indexOf(";")) ||
+        "image/jpeg"
       : "image/jpeg",
     is_stream: false,
     meta: {
@@ -116,7 +119,9 @@ function extractVideoUrl(value) {
 
     for (const key of directKeys) {
       if (value[key]) {
-        const found = extractVideoUrl(value[key]);
+        const found = extractVideoUrl(
+          value[key]
+        );
 
         if (found) {
           return found;
@@ -125,7 +130,9 @@ function extractVideoUrl(value) {
     }
 
     if (Array.isArray(value.data)) {
-      const found = extractVideoUrl(value.data);
+      const found = extractVideoUrl(
+        value.data
+      );
 
       if (found) {
         return found;
@@ -152,7 +159,8 @@ async function proxyVideo(videoUrl) {
   const contentLength =
     response.headers.get("content-length");
 
-  const buffer = await response.arrayBuffer();
+  const buffer =
+    await response.arrayBuffer();
 
   return new NextResponse(buffer, {
     status: 200,
@@ -189,7 +197,8 @@ export async function POST(request) {
     if (!imageData) {
       return NextResponse.json(
         {
-          error: "Character image is required.",
+          error:
+            "Character image is required.",
         },
         {
           status: 400,
@@ -207,7 +216,9 @@ export async function POST(request) {
 
     console.log(
       "BOMBA WAN GRADIO IMAGE:",
-      JSON.stringify(gradioImage)
+      JSON.stringify(
+        gradioImage
+      )
     );
 
     const finalPrompt = `
@@ -231,15 +242,15 @@ Smooth motion.
 Consistent character appearance.
 `.trim();
 
-    // Wan generation parameters.
-    // Duration remains 5 seconds.
+    // 18-second video.
+    // Wan's duration_seconds input is the 6th value.
     const data = [
       gradioImage,
       null,
       finalPrompt,
       6,
       DEFAULT_NEGATIVE_PROMPT,
-      5,
+      18,
       1,
       1,
       0,
@@ -259,15 +270,19 @@ Consistent character appearance.
       JSON.stringify(data)
     );
 
-    const response = await fetch(WAN_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        data,
-      }),
-    });
+    const response = await fetch(
+      WAN_API_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          data,
+        }),
+      }
+    );
 
     const responseText =
       await response.text();
@@ -381,6 +396,14 @@ export async function GET(request) {
     predictionId
   );
 
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(() => {
+      controller.abort();
+    }, POLL_TIMEOUT_MS);
+
   try {
     const response = await fetch(
       `${WAN_API_URL}/${encodeURIComponent(
@@ -390,20 +413,28 @@ export async function GET(request) {
         method: "GET",
         headers: {
           Accept: "text/event-stream",
+          "Cache-Control":
+            "no-cache",
         },
         cache: "no-store",
+        signal: controller.signal,
       }
     );
 
-    const responseText =
-      await response.text();
-
-    console.log(
-      "BOMBA WAN RESULT RESPONSE:",
-      responseText
-    );
-
     if (!response.ok) {
+      const responseText =
+        await response.text();
+
+      console.error(
+        "BOMBA WAN GET STATUS:",
+        response.status
+      );
+
+      console.error(
+        "BOMBA WAN GET RESPONSE:",
+        responseText
+      );
+
       return NextResponse.json(
         {
           status: "failed",
@@ -419,76 +450,113 @@ export async function GET(request) {
       );
     }
 
-    console.log(
-      "BOMBA WAN EVENTS:",
-      responseText
-    );
+    if (!response.body) {
+      return NextResponse.json({
+        status: "processing",
+        id: predictionId,
+        jobId: predictionId,
+        predictionId,
+      });
+    }
 
-    const lines =
-      responseText.split("\n");
+    const reader =
+      response.body.getReader();
 
-    for (
-      let i = 0;
-      i < lines.length;
-      i++
-    ) {
-      const line =
-        lines[i].trim();
+    const decoder =
+      new TextDecoder();
 
-      if (!line.startsWith("data:")) {
-        continue;
+    let buffer = "";
+
+    while (true) {
+      const { value, done } =
+        await reader.read();
+
+      if (done) {
+        break;
       }
 
-      const rawData =
-        line.slice(5).trim();
-
-      if (!rawData) {
-        continue;
-      }
-
-      const parsed =
-        safeJson(rawData);
-
-      console.log(
-        "BOMBA WAN EVENT PARSED:",
-        JSON.stringify(parsed)
+      buffer += decoder.decode(
+        value,
+        {
+          stream: true,
+        }
       );
 
-      const eventError =
-        extractError(parsed);
+      const events =
+        buffer.split("\n\n");
 
-      if (eventError) {
-        console.error(
-          "BOMBA WAN ERROR EVENT:",
-          eventError
-        );
+      buffer =
+        events.pop() || "";
 
-        return NextResponse.json(
-          {
-            status: "failed",
-            error: eventError,
-            rawWanError: rawData,
-            parsedWanError: parsed,
-            rawWanResponse:
-              responseText,
-            jobId: predictionId,
-          },
-          {
-            status: 502,
+      for (const event of events) {
+        const lines =
+          event.split("\n");
+
+        for (const rawLine of lines) {
+          const line =
+            rawLine.trim();
+
+          if (
+            !line.startsWith("data:")
+          ) {
+            continue;
           }
-        );
-      }
 
-      const videoUrl =
-        extractVideoUrl(parsed);
+          const rawData =
+            line.slice(5).trim();
 
-      if (videoUrl) {
-        console.log(
-          "BOMBA WAN RESULT URL:",
-          videoUrl
-        );
+          if (!rawData) {
+            continue;
+          }
 
-        return proxyVideo(videoUrl);
+          const parsed =
+            safeJson(rawData);
+
+          console.log(
+            "BOMBA WAN EVENT PARSED:",
+            JSON.stringify(parsed)
+          );
+
+          const eventError =
+            extractError(parsed);
+
+          if (eventError) {
+            console.error(
+              "BOMBA WAN ERROR EVENT:",
+              eventError
+            );
+
+            return NextResponse.json(
+              {
+                status: "failed",
+                error: eventError,
+                rawWanError:
+                  rawData,
+                parsedWanError:
+                  parsed,
+                jobId:
+                  predictionId,
+              },
+              {
+                status: 502,
+              }
+            );
+          }
+
+          const videoUrl =
+            extractVideoUrl(parsed);
+
+          if (videoUrl) {
+            console.log(
+              "BOMBA WAN RESULT URL:",
+              videoUrl
+            );
+
+            return proxyVideo(
+              videoUrl
+            );
+          }
+        }
       }
     }
 
@@ -499,6 +567,23 @@ export async function GET(request) {
       predictionId,
     });
   } catch (error) {
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+      console.log(
+        "BOMBA WAN POLL WINDOW ENDED - JOB STILL PROCESSING:",
+        predictionId
+      );
+
+      return NextResponse.json({
+        status: "processing",
+        id: predictionId,
+        jobId: predictionId,
+        predictionId,
+      });
+    }
+
     console.error(
       "BOMBA WAN GET ERROR:",
       error
@@ -516,5 +601,7 @@ export async function GET(request) {
         status: 502,
       }
     );
+  } finally {
+    clearTimeout(timeout);
   }
 }
