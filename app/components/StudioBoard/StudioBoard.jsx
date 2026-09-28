@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
   { number: "02", name: "PLAN", icon: "📋" },
@@ -15,6 +17,8 @@ const modules = [
 ];
 
 export default function StudioBoard() {
+  const [activeModule, setActiveModule] = useState(null);
+
   return (
     <section
       style={{
@@ -61,8 +65,7 @@ export default function StudioBoard() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "repeat(2, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
           gap: "8px",
         }}
       >
@@ -70,15 +73,20 @@ export default function StudioBoard() {
           <button
             key={module.number}
             type="button"
+            onClick={() => setActiveModule(module.name)}
             style={{
               width: "100%",
               minHeight: "58px",
               padding: "9px",
               borderRadius: "10px",
               border:
-                "1px solid rgba(255,255,255,0.10)",
+                activeModule === module.name
+                  ? "1px solid rgba(255,212,59,0.65)"
+                  : "1px solid rgba(255,255,255,0.10)",
               background:
-                "rgba(255,255,255,0.035)",
+                activeModule === module.name
+                  ? "rgba(255,212,59,0.08)"
+                  : "rgba(255,255,255,0.035)",
               color: "inherit",
               textAlign: "left",
               cursor: "pointer",
@@ -100,11 +108,7 @@ export default function StudioBoard() {
                 {module.icon}
               </span>
 
-              <span
-                style={{
-                  minWidth: 0,
-                }}
-              >
+              <span style={{ minWidth: 0 }}>
                 <span
                   style={{
                     display: "block",
@@ -131,6 +135,151 @@ export default function StudioBoard() {
           </button>
         ))}
       </div>
+
+      {activeModule === "SOUND" && (
+        <div
+          style={{
+            marginTop: "14px",
+            padding: "14px",
+            borderRadius: "12px",
+            border: "1px solid rgba(255,212,59,0.20)",
+            background: "rgba(255,212,59,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "700",
+                  letterSpacing: "1px",
+                  opacity: 0.55,
+                }}
+              >
+                SOUND STUDIO
+              </div>
+
+              <h3
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: "16px",
+                  fontWeight: "800",
+                }}
+              >
+                🔊 Build Your Sound
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveModule(null)}
+              style={{
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.05)",
+                color: "inherit",
+                borderRadius: "8px",
+                padding: "6px 9px",
+                fontSize: "11px",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "8px",
+            }}
+          >
+            {[
+              ["🎧", "Sound Effects", "Footsteps, doors, actions and more."],
+              ["🎵", "Background Music", "Music that fits your video."],
+              ["🌍", "Environment", "Rain, streets, crowds and ambience."],
+              ["🔊", "Volume", "Control the sound level."],
+            ].map(([icon, title, description]) => (
+              <button
+                key={title}
+                type="button"
+                style={{
+                  padding: "11px",
+                  minHeight: "82px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.035)",
+                  color: "inherit",
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontSize: "18px", marginBottom: "5px" }}>
+                  {icon}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "800",
+                    marginBottom: "3px",
+                  }}
+                >
+                  {title}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "9px",
+                    lineHeight: 1.4,
+                    opacity: 0.55,
+                  }}
+                >
+                  {description}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            style={{
+              width: "100%",
+              marginTop: "10px",
+              padding: "11px",
+              borderRadius: "9px",
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.05)",
+              color: "inherit",
+              fontSize: "11px",
+              fontWeight: "800",
+              cursor: "pointer",
+            }}
+          >
+            ▶️ PREVIEW SOUND
+          </button>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              fontSize: "9px",
+              lineHeight: 1.5,
+              opacity: 0.45,
+              textAlign: "center",
+            }}
+          >
+            AI sound generation will be connected here next.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
