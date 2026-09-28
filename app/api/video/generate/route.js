@@ -409,12 +409,33 @@ No sexual content.
     /* -----------------------------------------------------
        WAN INPUT
 
-       KEEP THIS ORDER EXACTLY AS REQUIRED BY THE SPACE.
+       INPUT ORDER:
+       1. input_image
+       2. last_image
+       3. prompt
+       4. steps
+       5. negative_prompt
+       6. duration_seconds
+       7. guidance_scale
+       8. guidance_scale_2
+       9. seed
+       10. randomize_seed
+       11. quality
+       12. scheduler
+       13. flow_shift
+       14. frame_multiplier
+       15. safe_mode
+       16. lora_groups
+       17. auto_lora_enabled
+       18. video_component
+
+       IMPORTANT:
+       last_image is optional, so we send null.
     ----------------------------------------------------- */
 
     const data = [
       imageData,
-      imageData,
+      null,
       finalPrompt,
       6,
       DEFAULT_NEGATIVE_PROMPT,
@@ -442,13 +463,18 @@ No sexual content.
     );
 
     console.log(
-      "Image type:",
+      "Input image type:",
       typeof imageData
     );
 
     console.log(
-      "Image length:",
+      "Input image length:",
       imageData.length
+    );
+
+    console.log(
+      "Last image:",
+      null
     );
 
     console.log(
@@ -457,8 +483,23 @@ No sexual content.
     );
 
     console.log(
+      "Steps:",
+      6
+    );
+
+    console.log(
       "Duration:",
       5
+    );
+
+    console.log(
+      "Scheduler:",
+      "UniPCMultistep"
+    );
+
+    console.log(
+      "Frame multiplier:",
+      16
     );
 
     console.log(
@@ -684,15 +725,6 @@ export async function GET(request) {
 
   const controller =
     new AbortController();
-
-  /*
-    Give the Hugging Face Space enough time
-    to return its SSE result.
-
-    If it does not finish within 45 seconds,
-    return processing and let the frontend
-    poll again.
-  */
 
   const timeout =
     setTimeout(() => {
