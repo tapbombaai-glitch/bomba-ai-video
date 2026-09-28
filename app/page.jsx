@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import PlanPanel from "./components/Plan/PlanPanel";
+import StudioBoard from "./components/StudioBoard/StudioBoard";
 
 export default function Home() {
 const [mode, setMode] = useState("Movie");
@@ -1778,9 +1779,7 @@ return (
   
 <PlanPanel idea={prompt} />
 
-{/* =================================================
-    WORKFLOW
-================================================= */}
+<StudioBoard />
 
   {/* =================================================  
       WORKFLOW  
