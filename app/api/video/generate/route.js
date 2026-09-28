@@ -95,7 +95,10 @@ function extractVideoUrl(value) {
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = extractVideoUrl(item);
-      if (found) return found;
+
+      if (found) {
+        return found;
+      }
     }
 
     return null;
@@ -194,7 +197,8 @@ export async function POST(request) {
       );
     }
 
-    const gradioImage = toGradioImage(imageData);
+    const gradioImage =
+      toGradioImage(imageData);
 
     console.log(
       "BOMBA WAN IMAGE TYPE:",
@@ -227,6 +231,8 @@ Smooth motion.
 Consistent character appearance.
 `.trim();
 
+    // Wan generation parameters.
+    // The duration value is 5 seconds.
     const data = [
       gradioImage,
       null,
@@ -263,7 +269,8 @@ Consistent character appearance.
       }),
     });
 
-    const responseText = await response.text();
+    const responseText =
+      await response.text();
 
     console.log(
       "BOMBA WAN POST STATUS:",
@@ -292,7 +299,8 @@ Consistent character appearance.
       );
     }
 
-    const parsed = safeJson(responseText);
+    const parsed =
+      safeJson(responseText);
 
     const predictionId =
       parsed?.event_id ||
@@ -311,7 +319,8 @@ Consistent character appearance.
           status: "failed",
           error:
             "Wan did not return an event ID.",
-          rawWanResponse: responseText,
+          rawWanResponse:
+            responseText,
         },
         {
           status: 502,
@@ -400,7 +409,8 @@ export async function GET(request) {
           status: "failed",
           error:
             `Wan status request failed with status ${response.status}.`,
-          rawWanResponse: responseText,
+          rawWanResponse:
+            responseText,
           jobId: predictionId,
         },
         {
@@ -417,7 +427,11 @@ export async function GET(request) {
     const lines =
       responseText.split("\n");
 
-    for (let i = 0; i < lines.length; i++) {
+    for (
+      let i = 0;
+      i < lines.length;
+      i++
+    ) {
       const line =
         lines[i].trim();
 
@@ -504,3 +518,7 @@ export async function GET(request) {
     );
   }
 }
+
+Path: "app/api/video/generate/route.js" (or the same path where your current file lives).
+
+But important: this does not solve the 0.04-second output yet. It preserves the 5-second setting because that's already present. After deploying this, the next file we should inspect is the frontend Generate Video code, because that's where we can verify how the returned video is being handled.
