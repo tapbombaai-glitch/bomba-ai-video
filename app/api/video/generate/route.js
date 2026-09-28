@@ -232,7 +232,7 @@ Consistent character appearance.
 `.trim();
 
     // Wan generation parameters.
-    // The duration value is 5 seconds.
+    // Duration remains 5 seconds.
     const data = [
       gradioImage,
       null,
@@ -518,7 +518,3 @@ export async function GET(request) {
     );
   }
 }
-
-Path: "app/api/video/generate/route.js" (or the same path where your current file lives).
-
-But important: this does not solve the 0.04-second output yet. It preserves the 5-second setting because that's already present. After deploying this, the next file we should inspect is the frontend Generate Video code, because that's where we can verify how the returned video is being handled.
