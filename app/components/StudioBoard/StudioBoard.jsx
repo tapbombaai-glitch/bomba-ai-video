@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/* =========================================================
+   PRODUCTION WORKFLOW
+========================================================= */
+
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
   { number: "02", name: "PLAN", icon: "📋" },
@@ -15,6 +19,10 @@ const modules = [
   { number: "10", name: "PREVIEW", icon: "▶️" },
   { number: "11", name: "EXPORT", icon: "📤" },
 ];
+
+/* =========================================================
+   SOUND CATEGORIES
+========================================================= */
 
 const soundCategories = [
   {
@@ -39,6 +47,10 @@ const soundCategories = [
   },
 ];
 
+/* =========================================================
+   SOUND LIBRARY
+========================================================= */
+
 const soundLibrary = {
   "BOMBA Originals": [
     {
@@ -58,14 +70,16 @@ const soundLibrary = {
   "Licensed Music": [
     {
       id: "cinematic-background",
-      title: "Cinematic Background",
-      description: "Professional cinematic background.",
+      title: "Subtle Background",
+      description: "Cinematic background music by AudioDollar.",
       file: "/audio/music/cinematic-background.mp3",
+      creator: "AudioDollar",
+      source: "Pixabay",
     },
     {
       id: "motivational-background",
       title: "Motivational Background",
-      description: "Positive professional background.",
+      description: "Professional motivational background.",
       file: "/audio/music/motivational-background.mp3",
     },
   ],
@@ -78,7 +92,7 @@ const soundLibrary = {
       file: "/audio/sfx/transition-whoosh.mp3",
     },
     {
-      id: "impact",
+      id: "cinematic-impact",
       title: "Cinematic Impact",
       description: "Strong scene impact effect.",
       file: "/audio/sfx/cinematic-impact.mp3",
@@ -101,11 +115,15 @@ const soundLibrary = {
   ],
 };
 
+/* =========================================================
+   STUDIO BOARD
+========================================================= */
+
 export default function StudioBoard() {
   const [activeModule, setActiveModule] = useState(null);
 
   const [soundCategory, setSoundCategory] =
-    useState("BOMBA Originals");
+    useState("Licensed Music");
 
   const [selectedSound, setSelectedSound] =
     useState(null);
@@ -124,26 +142,37 @@ export default function StudioBoard() {
   const currentSounds =
     soundLibrary[soundCategory] || [];
 
+  /* =======================================================
+     CLEAN UP AUDIO WHEN COMPONENT UNMOUNTS
+  ======================================================= */
+
   useEffect(() => {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
+        audioRef.current = null;
       }
     };
   }, []);
 
-  function stopSound() {
-    if (!audioRef.current) {
-      setIsPlaying(false);
-      return;
-    }
+  /* =======================================================
+     STOP SOUND
+  ======================================================= */
 
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
+  function stopSound() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
 
     setIsPlaying(false);
   }
+
+  /* =======================================================
+     SELECT SOUND CATEGORY
+  ======================================================= */
 
   function selectCategory(category) {
     stopSound();
@@ -156,6 +185,10 @@ export default function StudioBoard() {
     );
   }
 
+  /* =======================================================
+     SELECT SOUND
+  ======================================================= */
+
   function selectSound(sound) {
     stopSound();
 
@@ -165,6 +198,10 @@ export default function StudioBoard() {
       `${sound.title} selected. Press PREVIEW SOUND.`
     );
   }
+
+  /* =======================================================
+     PREVIEW SOUND
+  ======================================================= */
 
   async function previewSound() {
     if (!selectedSound) {
@@ -181,64 +218,40 @@ export default function StudioBoard() {
     }
 
     try {
-      if (!audioRef.current) {
-        audioRef.current =
-          new Audio(selectedSound.file);
+      stopSound();
 
-        audioRef.current.addEventListener(
-          "ended",
-          () => {
-            setIsPlaying(false);
-            setSoundStatus(
-              "Sound finished. Ready again."
-            );
-          }
-        );
+      const audio =
+        new Audio(selectedSound.file);
 
-        audioRef.current.addEventListener(
-          "error",
-          () => {
-            setIsPlaying(false);
-            setSoundStatus(
-              "Unable to load this audio file."
-            );
-          }
-        );
-      } else {
-        audioRef.current.pause();
+      audio.volume = volume / 100;
 
-        audioRef.current =
-          new Audio(selectedSound.file);
+      audioRef.current = audio;
 
-        audioRef.current.addEventListener(
-          "ended",
-          () => {
-            setIsPlaying(false);
-            setSoundStatus(
-              "Sound finished. Ready again."
-            );
-          }
-        );
+      audio.addEventListener(
+        "ended",
+        () => {
+          setIsPlaying(false);
+          setSoundStatus(
+            "Sound finished. Ready again."
+          );
+        }
+      );
 
-        audioRef.current.addEventListener(
-          "error",
-          () => {
-            setIsPlaying(false);
-            setSoundStatus(
-              "Unable to load this audio file."
-            );
-          }
-        );
-      }
-
-      audioRef.current.volume =
-        volume / 100;
+      audio.addEventListener(
+        "error",
+        () => {
+          setIsPlaying(false);
+          setSoundStatus(
+            "Unable to load this audio file."
+          );
+        }
+      );
 
       setSoundStatus(
         `Loading ${selectedSound.title}...`
       );
 
-      await audioRef.current.play();
+      await audio.play();
 
       setIsPlaying(true);
 
@@ -254,10 +267,14 @@ export default function StudioBoard() {
       setIsPlaying(false);
 
       setSoundStatus(
-        "Audio could not be played. Check the audio file."
+        "Audio could not be played. Check the MP3 file."
       );
     }
   }
+
+  /* =======================================================
+     VOLUME
+  ======================================================= */
 
   function updateVolume(value) {
     const nextVolume = Number(value);
@@ -269,6 +286,10 @@ export default function StudioBoard() {
         nextVolume / 100;
     }
   }
+
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <section
@@ -282,6 +303,10 @@ export default function StudioBoard() {
           "rgba(255,255,255,0.025)",
       }}
     >
+      {/* ===================================================
+          HEADER
+      =================================================== */}
+
       <div style={{ marginBottom: "12px" }}>
         <div
           style={{
@@ -314,6 +339,10 @@ export default function StudioBoard() {
           Build your video from idea to export.
         </p>
       </div>
+
+      {/* ===================================================
+          PRODUCTION MODULES
+      =================================================== */}
 
       <div
         style={{
@@ -392,6 +421,10 @@ export default function StudioBoard() {
         ))}
       </div>
 
+      {/* ===================================================
+          SOUND STUDIO
+      =================================================== */}
+
       {activeModule === "SOUND" && (
         <div
           style={{
@@ -404,6 +437,8 @@ export default function StudioBoard() {
               "rgba(255,212,59,0.04)",
           }}
         >
+          {/* SOUND HEADER */}
+
           <div
             style={{
               display: "flex",
@@ -457,6 +492,8 @@ export default function StudioBoard() {
               CLOSE
             </button>
           </div>
+
+          {/* SOUND CATEGORIES */}
 
           <div
             style={{
@@ -528,6 +565,8 @@ export default function StudioBoard() {
             )}
           </div>
 
+          {/* SOUND LIST */}
+
           <div
             style={{
               marginTop: "12px",
@@ -594,9 +633,24 @@ export default function StudioBoard() {
                 >
                   {sound.description}
                 </div>
+
+                {sound.creator && (
+                  <div
+                    style={{
+                      marginTop: "5px",
+                      fontSize: "8px",
+                      opacity: 0.4,
+                    }}
+                  >
+                    Music by {sound.creator} ·{" "}
+                    {sound.source}
+                  </div>
+                )}
               </button>
             ))}
           </div>
+
+          {/* VOLUME */}
 
           <div
             style={{
@@ -653,6 +707,8 @@ export default function StudioBoard() {
             />
           </div>
 
+          {/* PREVIEW BUTTON */}
+
           <button
             type="button"
             onClick={previewSound}
@@ -677,6 +733,8 @@ export default function StudioBoard() {
               : "▶️ PREVIEW SOUND"}
           </button>
 
+          {/* STATUS */}
+
           <div
             style={{
               marginTop: "9px",
@@ -688,6 +746,8 @@ export default function StudioBoard() {
           >
             {soundStatus}
           </div>
+
+          {/* FOOTER */}
 
           <div
             style={{
