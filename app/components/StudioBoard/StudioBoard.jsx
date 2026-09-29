@@ -16,73 +16,247 @@ const modules = [
   { number: "11", name: "EXPORT", icon: "📤" },
 ];
 
-const soundOptions = [
-  {
-    icon: "🎧",
-    title: "Sound Effects",
-    description: "Footsteps, doors, actions and more.",
-  },
+const soundCategories = [
   {
     icon: "🎵",
-    title: "Background Music",
-    description: "Music that fits your video.",
+    title: "BOMBA Originals",
+    description: "Original music created for BOMBA.",
+  },
+  {
+    icon: "🎼",
+    title: "Licensed Music",
+    description: "Music cleared for use in video projects.",
+  },
+  {
+    icon: "🔊",
+    title: "Sound Effects",
+    description: "Professional effects for your scenes.",
   },
   {
     icon: "🌍",
     title: "Environment",
-    description: "Rain, streets, crowds and ambience.",
+    description: "Rain, city, crowd and natural ambience.",
   },
 ];
 
+const soundLibrary = {
+  "BOMBA Originals": [
+    {
+      id: "bomba-intro",
+      title: "BOMBA Intro",
+      description: "Original cinematic intro music.",
+      file: "/audio/bomba/bomba-intro.mp3",
+    },
+    {
+      id: "bomba-cinematic",
+      title: "BOMBA Cinematic",
+      description: "Modern cinematic background.",
+      file: "/audio/bomba/bomba-cinematic.mp3",
+    },
+  ],
+
+  "Licensed Music": [
+    {
+      id: "cinematic-background",
+      title: "Cinematic Background",
+      description: "Professional cinematic background.",
+      file: "/audio/music/cinematic-background.mp3",
+    },
+    {
+      id: "motivational-background",
+      title: "Motivational Background",
+      description: "Positive professional background.",
+      file: "/audio/music/motivational-background.mp3",
+    },
+  ],
+
+  "Sound Effects": [
+    {
+      id: "transition-whoosh",
+      title: "Transition Whoosh",
+      description: "Clean cinematic transition effect.",
+      file: "/audio/sfx/transition-whoosh.mp3",
+    },
+    {
+      id: "impact",
+      title: "Cinematic Impact",
+      description: "Strong scene impact effect.",
+      file: "/audio/sfx/cinematic-impact.mp3",
+    },
+  ],
+
+  Environment: [
+    {
+      id: "city-ambience",
+      title: "City Ambience",
+      description: "Natural urban background atmosphere.",
+      file: "/audio/environment/city-ambience.mp3",
+    },
+    {
+      id: "rain-ambience",
+      title: "Rain Ambience",
+      description: "Soft atmospheric rain.",
+      file: "/audio/environment/rain-ambience.mp3",
+    },
+  ],
+};
+
 export default function StudioBoard() {
   const [activeModule, setActiveModule] = useState(null);
-  const [soundType, setSoundType] = useState("Background Music");
+
+  const [soundCategory, setSoundCategory] =
+    useState("BOMBA Originals");
+
+  const [selectedSound, setSelectedSound] =
+    useState(null);
+
   const [volume, setVolume] = useState(70);
-  const [isPlaying, setIsPlaying] = useState(false);
+
+  const [isPlaying, setIsPlaying] =
+    useState(false);
+
   const [soundStatus, setSoundStatus] = useState(
-    "Ready for free sound testing."
+    "Choose a professional sound to preview."
   );
 
-  const audioContextRef = useRef(null);
-  const masterGainRef = useRef(null);
-  const activeNodesRef = useRef([]);
-  const stopTimerRef = useRef(null);
+  const audioRef = useRef(null);
+
+  const currentSounds =
+    soundLibrary[soundCategory] || [];
 
   useEffect(() => {
     return () => {
-      stopSound();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
     };
   }, []);
 
-  function getAudioContext() {
-    if (typeof window === "undefined") {
-      throw new Error("Browser audio is unavailable.");
+  function stopSound() {
+    if (!audioRef.current) {
+      setIsPlaying(false);
+      return;
     }
 
-    const AudioContextClass =
-      window.AudioContext ||
-      window.webkitAudioContext;
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
 
-    if (!AudioContextClass) {
-      throw new Error(
-        "This browser does not support Web Audio."
+    setIsPlaying(false);
+  }
+
+  function selectCategory(category) {
+    stopSound();
+
+    setSoundCategory(category);
+    setSelectedSound(null);
+
+    setSoundStatus(
+      `${category} selected. Choose a sound below.`
+    );
+  }
+
+  function selectSound(sound) {
+    stopSound();
+
+    setSelectedSound(sound);
+
+    setSoundStatus(
+      `${sound.title} selected. Press PREVIEW SOUND.`
+    );
+  }
+
+  async function previewSound() {
+    if (!selectedSound) {
+      setSoundStatus(
+        "Choose a sound before previewing."
+      );
+      return;
+    }
+
+    if (isPlaying) {
+      stopSound();
+      setSoundStatus("Sound stopped.");
+      return;
+    }
+
+    try {
+      if (!audioRef.current) {
+        audioRef.current =
+          new Audio(selectedSound.file);
+
+        audioRef.current.addEventListener(
+          "ended",
+          () => {
+            setIsPlaying(false);
+            setSoundStatus(
+              "Sound finished. Ready again."
+            );
+          }
+        );
+
+        audioRef.current.addEventListener(
+          "error",
+          () => {
+            setIsPlaying(false);
+            setSoundStatus(
+              "Unable to load this audio file."
+            );
+          }
+        );
+      } else {
+        audioRef.current.pause();
+
+        audioRef.current =
+          new Audio(selectedSound.file);
+
+        audioRef.current.addEventListener(
+          "ended",
+          () => {
+            setIsPlaying(false);
+            setSoundStatus(
+              "Sound finished. Ready again."
+            );
+          }
+        );
+
+        audioRef.current.addEventListener(
+          "error",
+          () => {
+            setIsPlaying(false);
+            setSoundStatus(
+              "Unable to load this audio file."
+            );
+          }
+        );
+      }
+
+      audioRef.current.volume =
+        volume / 100;
+
+      setSoundStatus(
+        `Loading ${selectedSound.title}...`
+      );
+
+      await audioRef.current.play();
+
+      setIsPlaying(true);
+
+      setSoundStatus(
+        `${selectedSound.title} is playing.`
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA SOUND PLAYER ERROR:",
+        error
+      );
+
+      setIsPlaying(false);
+
+      setSoundStatus(
+        "Audio could not be played. Check the audio file."
       );
     }
-
-    if (!audioContextRef.current) {
-      const context = new AudioContextClass();
-
-      const gain = context.createGain();
-
-      gain.gain.value = volume / 100;
-
-      gain.connect(context.destination);
-
-      audioContextRef.current = context;
-      masterGainRef.current = gain;
-    }
-
-    return audioContextRef.current;
   }
 
   function updateVolume(value) {
@@ -90,308 +264,10 @@ export default function StudioBoard() {
 
     setVolume(nextVolume);
 
-    if (masterGainRef.current) {
-      masterGainRef.current.gain.value =
+    if (audioRef.current) {
+      audioRef.current.volume =
         nextVolume / 100;
     }
-  }
-
-  function stopSound() {
-    if (stopTimerRef.current) {
-      clearTimeout(stopTimerRef.current);
-      stopTimerRef.current = null;
-    }
-
-    activeNodesRef.current.forEach((node) => {
-      try {
-        node.stop();
-      } catch {
-        // Already stopped.
-      }
-
-      try {
-        node.disconnect();
-      } catch {
-        // Already disconnected.
-      }
-    });
-
-    activeNodesRef.current = [];
-
-    setIsPlaying(false);
-  }
-
-  function makeTone(
-    context,
-    frequency,
-    startTime,
-    duration,
-    waveform,
-    level
-  ) {
-    const oscillator =
-      context.createOscillator();
-
-    const gain =
-      context.createGain();
-
-    oscillator.type = waveform;
-
-    oscillator.frequency.setValueAtTime(
-      frequency,
-      startTime
-    );
-
-    gain.gain.setValueAtTime(
-      0,
-      startTime
-    );
-
-    gain.gain.linearRampToValueAtTime(
-      level,
-      startTime + 0.05
-    );
-
-    gain.gain.linearRampToValueAtTime(
-      0,
-      startTime + duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(masterGainRef.current);
-
-    oscillator.start(startTime);
-    oscillator.stop(
-      startTime + duration + 0.05
-    );
-
-    activeNodesRef.current.push(
-      oscillator
-    );
-  }
-
-  function makeNoise(
-    context,
-    startTime,
-    duration,
-    level
-  ) {
-    const buffer =
-      context.createBuffer(
-        1,
-        context.sampleRate * duration,
-        context.sampleRate
-      );
-
-    const data =
-      buffer.getChannelData(0);
-
-    for (let i = 0; i < data.length; i++) {
-      data[i] =
-        Math.random() * 2 - 1;
-    }
-
-    const source =
-      context.createBufferSource();
-
-    const filter =
-      context.createBiquadFilter();
-
-    const gain =
-      context.createGain();
-
-    source.buffer = buffer;
-
-    filter.type = "lowpass";
-    filter.frequency.value = 1200;
-
-    gain.gain.setValueAtTime(
-      0,
-      startTime
-    );
-
-    gain.gain.linearRampToValueAtTime(
-      level,
-      startTime + 0.2
-    );
-
-    gain.gain.linearRampToValueAtTime(
-      0,
-      startTime + duration
-    );
-
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterGainRef.current);
-
-    source.start(startTime);
-    source.stop(startTime + duration);
-
-    activeNodesRef.current.push(source);
-  }
-
-  function createBackgroundMusic(context) {
-    const start =
-      context.currentTime + 0.05;
-
-    const notes = [
-      261.63,
-      329.63,
-      392.0,
-      329.63,
-      293.66,
-      349.23,
-      440.0,
-      349.23,
-      261.63,
-      329.63,
-      392.0,
-      523.25,
-      392.0,
-      329.63,
-      293.66,
-      261.63,
-      329.63,
-      392.0,
-    ];
-
-    notes.forEach((frequency, index) => {
-      makeTone(
-        context,
-        frequency,
-        start + index,
-        0.8,
-        "sine",
-        0.08
-      );
-    });
-
-    for (let i = 0; i < 9; i++) {
-      makeTone(
-        context,
-        130.81,
-        start + i * 2,
-        1.6,
-        "triangle",
-        0.035
-      );
-    }
-  }
-
-  function createSoundEffects(context) {
-    const start =
-      context.currentTime + 0.05;
-
-    for (let i = 0; i < 7; i++) {
-      const time =
-        start + i * 2.5;
-
-      makeTone(
-        context,
-        100 + i * 45,
-        time,
-        0.18,
-        "square",
-        0.16
-      );
-
-      makeNoise(
-        context,
-        time,
-        0.35,
-        0.08
-      );
-    }
-  }
-
-  function createEnvironment(context) {
-    const start =
-      context.currentTime + 0.05;
-
-    makeNoise(
-      context,
-      start,
-      18,
-      0.12
-    );
-
-    for (let i = 0; i < 18; i++) {
-      makeTone(
-        context,
-        700 + (i % 5) * 90,
-        start + i,
-        0.12,
-        "sine",
-        0.025
-      );
-    }
-  }
-
-  async function previewSound() {
-    if (isPlaying) {
-      stopSound();
-      setSoundStatus("Sound stopped.");
-      return;
-    }
-
-    setSoundStatus("Starting sound...");
-
-    try {
-      const context = getAudioContext();
-
-      if (context.state === "suspended") {
-        await context.resume();
-      }
-
-      stopSound();
-
-      if (soundType === "Background Music") {
-        createBackgroundMusic(context);
-      } else if (soundType === "Sound Effects") {
-        createSoundEffects(context);
-      } else if (soundType === "Environment") {
-        createEnvironment(context);
-      }
-
-      setIsPlaying(true);
-
-      setSoundStatus(
-        `${soundType} is playing.`
-      );
-
-      stopTimerRef.current =
-        setTimeout(() => {
-          activeNodesRef.current = [];
-          setIsPlaying(false);
-          setSoundStatus(
-            "Sound finished. Ready again."
-          );
-        }, 18000);
-    } catch (error) {
-      console.error(
-        "BOMBA SOUND TEST ERROR:",
-        error
-      );
-
-      setIsPlaying(false);
-
-      setSoundStatus(
-        `Audio error: ${
-          error?.message ||
-          "Unable to play sound."
-        }`
-      );
-    }
-  }
-
-  function selectSound(type) {
-    stopSound();
-
-    setSoundType(type);
-
-    setSoundStatus(
-      `${type} selected. Press PREVIEW SOUND.`
-    );
   }
 
   return (
@@ -556,7 +432,7 @@ export default function StudioBoard() {
                   fontWeight: "800",
                 }}
               >
-                🔊 Build Your Sound
+                🔊 Professional Sound
               </h3>
             </div>
 
@@ -590,24 +466,28 @@ export default function StudioBoard() {
               gap: "8px",
             }}
           >
-            {soundOptions.map(
-              ({ icon, title, description }) => (
+            {soundCategories.map(
+              ({
+                icon,
+                title,
+                description,
+              }) => (
                 <button
                   key={title}
                   type="button"
                   onClick={() =>
-                    selectSound(title)
+                    selectCategory(title)
                   }
                   style={{
                     padding: "11px",
                     minHeight: "82px",
                     borderRadius: "10px",
                     border:
-                      soundType === title
+                      soundCategory === title
                         ? "1px solid rgba(255,212,59,0.65)"
                         : "1px solid rgba(255,255,255,0.10)",
                     background:
-                      soundType === title
+                      soundCategory === title
                         ? "rgba(255,212,59,0.10)"
                         : "rgba(255,255,255,0.035)",
                     color: "inherit",
@@ -646,6 +526,76 @@ export default function StudioBoard() {
                 </button>
               )
             )}
+          </div>
+
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "10px",
+              borderRadius: "9px",
+              background:
+                "rgba(255,255,255,0.035)",
+              border:
+                "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                letterSpacing: "1px",
+                marginBottom: "9px",
+                opacity: 0.65,
+              }}
+            >
+              {soundCategory.toUpperCase()}
+            </div>
+
+            {currentSounds.map((sound) => (
+              <button
+                key={sound.id}
+                type="button"
+                onClick={() =>
+                  selectSound(sound)
+                }
+                style={{
+                  width: "100%",
+                  marginBottom: "7px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border:
+                    selectedSound?.id === sound.id
+                      ? "1px solid rgba(255,212,59,0.65)"
+                      : "1px solid rgba(255,255,255,0.08)",
+                  background:
+                    selectedSound?.id === sound.id
+                      ? "rgba(255,212,59,0.08)"
+                      : "rgba(255,255,255,0.025)",
+                  color: "inherit",
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "800",
+                  }}
+                >
+                  {sound.title}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "3px",
+                    fontSize: "9px",
+                    opacity: 0.55,
+                  }}
+                >
+                  {sound.description}
+                </div>
+              </button>
+            ))}
           </div>
 
           <div
@@ -748,8 +698,8 @@ export default function StudioBoard() {
               opacity: 0.38,
             }}
           >
-            Free browser test mode — no AI credits required.
-            Real AI sound will be connected later.
+            BOMBA Sound Library — licensed assets
+            and BOMBA Originals only.
           </div>
         </div>
       )}
