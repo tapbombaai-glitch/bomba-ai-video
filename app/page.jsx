@@ -99,6 +99,7 @@ export default function Home() {
       data?.message,
       data?.detail,
       data?.details,
+      data?.rawEternalError,
       data?.rawWanError,
       fallback,
     ];
@@ -184,6 +185,58 @@ export default function Home() {
   };
 
   /* =====================================================
+     EXTRACT VIDEO URL
+  ===================================================== */
+
+  const extractVideoUrl = (data) => {
+    const possibleUrls = [
+      data?.videoUrl,
+      data?.video_url,
+      data?.video?.url,
+      data?.output,
+      Array.isArray(data?.output)
+        ? data.output[0]
+        : null,
+    ];
+
+    for (const value of possibleUrls) {
+      if (
+        typeof value === "string" &&
+        value.trim()
+      ) {
+        return value.trim();
+      }
+    }
+
+    return null;
+  };
+
+  /* =====================================================
+     EXTRACT JOB ID
+  ===================================================== */
+
+  const extractJobId = (data) => {
+    const possibleIds = [
+      data?.id,
+      data?.jobId,
+      data?.request_id,
+      data?.predictionId,
+      data?.eventId,
+    ];
+
+    for (const value of possibleIds) {
+      if (
+        typeof value === "string" &&
+        value.trim()
+      ) {
+        return value.trim();
+      }
+    }
+
+    return null;
+  };
+
+  /* =====================================================
      CHECK VIDEO
   ===================================================== */
 
@@ -215,16 +268,16 @@ export default function Home() {
 
         if (attempts === 1) {
           setStatus(
-            "Connecting to Wan 2.2... 🎬 0 sec"
+            "Connecting to Eternal AI... 🎬 0 sec"
           );
         } else {
           setStatus(
-            `Wan 2.2 is still generating your video... ${elapsedSeconds} sec`
+            `Eternal AI is still generating your video... ${elapsedSeconds} sec`
           );
         }
 
         console.log(
-          "BOMBA WAN STATUS CHECK:",
+          "BOMBA ETERNAL AI STATUS CHECK:",
           attempts,
           predictionId
         );
@@ -235,7 +288,7 @@ export default function Home() {
           )}`;
 
         console.log(
-          "BOMBA WAN POLL URL:",
+          "BOMBA ETERNAL AI POLL URL:",
           pollUrl
         );
 
@@ -259,9 +312,13 @@ export default function Home() {
           res.headers.get("content-type") || "";
 
         console.log(
-          "BOMBA WAN POLL CONTENT TYPE:",
+          "BOMBA ETERNAL AI POLL CONTENT TYPE:",
           contentType
         );
+
+        /* ===============================================
+           VIDEO DIRECTLY RETURNED
+        =============================================== */
 
         if (
           res.ok &&
@@ -274,7 +331,7 @@ export default function Home() {
 
           if (!videoBlob.size) {
             throw new Error(
-              "Wan 2.2 returned an empty video file."
+              "Eternal AI returned an empty video file."
             );
           }
 
@@ -325,7 +382,7 @@ export default function Home() {
             maxAttempts
           ) {
             setStatus(
-              "Wan 2.2 is processing the video... reconnecting..."
+              "Eternal AI is processing the video... reconnecting..."
             );
 
             await wait(3000);
@@ -349,7 +406,7 @@ export default function Home() {
             maxAttempts
           ) {
             setStatus(
-              "Wan 2.2 is processing the video... reconnecting..."
+              "Eternal AI is processing the video... reconnecting..."
             );
 
             await wait(3000);
@@ -357,12 +414,12 @@ export default function Home() {
           }
 
           throw new Error(
-            "Wan 2.2 returned an empty status response."
+            "Eternal AI returned an empty status response."
           );
         }
 
         console.log(
-          "BOMBA VIDEO STATUS:",
+          "BOMBA ETERNAL AI VIDEO STATUS:",
           data
         );
 
@@ -370,15 +427,16 @@ export default function Home() {
            VIDEO READY AS JSON
         =============================================== */
 
+        const returnedVideoUrl =
+          extractVideoUrl(data);
+
         if (
           res.ok &&
-          data.status === "completed" &&
-          typeof data.videoUrl === "string" &&
-          data.videoUrl.trim()
+          returnedVideoUrl
         ) {
           console.log(
             "BOMBA VIDEO READY:",
-            data.videoUrl
+            returnedVideoUrl
           );
 
           if (
@@ -388,7 +446,7 @@ export default function Home() {
           }
 
           setVideoUrl(
-            data.videoUrl
+            returnedVideoUrl
           );
 
           setStatus(
@@ -402,18 +460,28 @@ export default function Home() {
         }
 
         /* ===============================================
+           NORMALIZE STATUS
+        =============================================== */
+
+        const currentStatus =
+          typeof data.status === "string"
+            ? data.status.toLowerCase()
+            : "";
+
+        /* ===============================================
            GENERATION FAILED
         =============================================== */
 
         if (
-          data.status === "failed" ||
-          data.status === "canceled" ||
-          data.status === "cancelled"
+          currentStatus === "failed" ||
+          currentStatus === "error" ||
+          currentStatus === "canceled" ||
+          currentStatus === "cancelled"
         ) {
           const failedMessage =
             getSafeErrorMessage(
               data,
-              "Wan 2.2 video generation failed."
+              "Eternal AI video generation failed."
             );
 
           const failedError =
@@ -427,17 +495,17 @@ export default function Home() {
         }
 
         /* ===============================================
-           EXPIRED / MISSING EVENT
+           EXPIRED
         =============================================== */
 
         if (
           res.status === 410 ||
-          data.status === "expired"
+          currentStatus === "expired"
         ) {
           const expiredMessage =
             getSafeErrorMessage(
               data,
-              "The Wan 2.2 generation event expired or is no longer available."
+              "The Eternal AI generation request expired or is no longer available."
             );
 
           const expiredError =
@@ -455,8 +523,12 @@ export default function Home() {
         =============================================== */
 
         if (
-          data.status === "processing" ||
-          data.status === "queued" ||
+          currentStatus === "processing" ||
+          currentStatus === "queued" ||
+          currentStatus === "in_queue" ||
+          currentStatus === "in_progress" ||
+          currentStatus === "pending" ||
+          currentStatus === "started" ||
           res.status === 202
         ) {
           if (
@@ -471,7 +543,7 @@ export default function Home() {
               );
 
             setStatus(
-              `Wan 2.2 is still generating your video... ${currentSeconds} sec`
+              `Eternal AI is still generating your video... ${currentSeconds} sec`
             );
 
             await wait(3000);
@@ -479,7 +551,7 @@ export default function Home() {
           }
 
           throw new Error(
-            "The video is taking longer than expected. Wan 2.2 may still be generating it."
+            "The video is taking longer than expected. Eternal AI may still be generating it."
           );
         }
 
@@ -504,7 +576,7 @@ export default function Home() {
         =============================================== */
 
         console.warn(
-          "BOMBA UNKNOWN WAN RESPONSE:",
+          "BOMBA UNKNOWN ETERNAL AI RESPONSE:",
           data
         );
 
@@ -520,7 +592,7 @@ export default function Home() {
             );
 
           setStatus(
-            `Wan 2.2 is processing your video... ${currentSeconds} sec`
+            `Eternal AI is processing your video... ${currentSeconds} sec`
           );
 
           await wait(3000);
@@ -528,7 +600,7 @@ export default function Home() {
         }
 
         throw new Error(
-          "Wan 2.2 did not return a final video result."
+          "Eternal AI did not return a final video result."
         );
       } catch (err) {
         console.error(
@@ -560,7 +632,7 @@ export default function Home() {
                 error:
                   err?.message,
               },
-              "Wan 2.2 video generation failed."
+              "Eternal AI video generation failed."
             )
           );
 
@@ -586,7 +658,7 @@ export default function Home() {
             );
 
           setStatus(
-            `Wan 2.2 is still working... reconnecting... ${currentSeconds} sec`
+            `Eternal AI is still working... reconnecting... ${currentSeconds} sec`
           );
 
           await wait(3000);
@@ -693,7 +765,16 @@ ${prompt}
               mode,
               prompt:
                 realisticPrompt,
-              characterImage,
+
+              /*
+                Keep both fields so the backend can
+                use the imageData field explicitly.
+              */
+              imageData:
+                characterImage,
+
+              characterImage:
+                characterImage,
             }),
           }
         );
@@ -752,18 +833,19 @@ ${prompt}
            VIDEO ALREADY AVAILABLE
         =============================================== */
 
+        const directVideoUrl =
+          extractVideoUrl(data);
+
         if (
-          typeof data.videoUrl ===
-            "string" &&
-          data.videoUrl.trim()
+          directVideoUrl
         ) {
           console.log(
             "BOMBA DIRECT VIDEO URL:",
-            data.videoUrl
+            directVideoUrl
           );
 
           setVideoUrl(
-            data.videoUrl
+            directVideoUrl
           );
 
           setStatus(
@@ -781,32 +863,16 @@ ${prompt}
         =============================================== */
 
         const jobId =
-          typeof data.id ===
-              "string" &&
-            data.id.trim()
-            ? data.id
-            : typeof data.jobId ===
-                  "string" &&
-                data.jobId.trim()
-              ? data.jobId
-              : typeof data.predictionId ===
-                    "string" &&
-                  data.predictionId.trim()
-                ? data.predictionId
-                : typeof data.eventId ===
-                      "string" &&
-                    data.eventId.trim()
-                  ? data.eventId
-                  : null;
+          extractJobId(data);
 
         if (jobId) {
           console.log(
-            "BOMBA WAN JOB:",
+            "BOMBA ETERNAL AI JOB:",
             jobId
           );
 
           setStatus(
-            "Wan 2.2 has started generating your video... 🎬"
+            "Eternal AI has started generating your video... 🎬"
           );
 
           await pollVideo(
@@ -985,7 +1051,7 @@ ${prompt}
   ===================================================== */
 
   return (
-    <main className="studio">
+    <main>
 
       {/* =================================================
           TOP BAR
