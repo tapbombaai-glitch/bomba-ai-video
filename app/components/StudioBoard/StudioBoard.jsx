@@ -133,6 +133,9 @@ export default function StudioBoard() {
   const [isPlaying, setIsPlaying] =
     useState(false);
 
+  const [isLoading, setIsLoading] =
+    useState(false);
+
   const [soundStatus, setSoundStatus] = useState(
     "Choose a professional sound to preview."
   );
@@ -143,14 +146,15 @@ export default function StudioBoard() {
     soundLibrary[soundCategory] || [];
 
   /* =======================================================
-     CLEAN UP AUDIO WHEN COMPONENT UNMOUNTS
+     CLEAN UP AUDIO
   ======================================================= */
 
   useEffect(() => {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
         audioRef.current = null;
       }
     };
@@ -163,11 +167,21 @@ export default function StudioBoard() {
   function stopSound() {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+
+      try {
+        audioRef.current.currentTime = 0;
+      } catch (error) {
+        console.log("Audio reset skipped.");
+      }
+
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
+
       audioRef.current = null;
     }
 
     setIsPlaying(false);
+    setIsLoading(false);
   }
 
   /* =======================================================
@@ -203,7 +217,7 @@ export default function StudioBoard() {
      PREVIEW SOUND
   ======================================================= */
 
-  async function previewSound() {
+  function previewSound() {
     if (!selectedSound) {
       setSoundStatus(
         "Choose a sound before previewing."
@@ -211,7 +225,7 @@ export default function StudioBoard() {
       return;
     }
 
-    if (isPlaying) {
+    if (isPlaying || isLoading) {
       stopSound();
       setSoundStatus("Sound stopped.");
       return;
@@ -220,17 +234,33 @@ export default function StudioBoard() {
     try {
       stopSound();
 
-      const audio =
-        new Audio(selectedSound.file);
+      setIsLoading(true);
 
+      setSoundStatus(
+        `Loading ${selectedSound.title}...`
+      );
+
+      const audio = new Audio();
+
+      audio.preload = "auto";
       audio.volume = volume / 100;
 
       audioRef.current = audio;
 
       audio.addEventListener(
+        "canplay",
+        () => {
+          setIsLoading(false);
+        },
+        { once: true }
+      );
+
+      audio.addEventListener(
         "ended",
         () => {
           setIsPlaying(false);
+          setIsLoading(false);
+
           setSoundStatus(
             "Sound finished. Ready again."
           );
@@ -240,24 +270,50 @@ export default function StudioBoard() {
       audio.addEventListener(
         "error",
         () => {
+          console.error(
+            "BOMBA AUDIO ERROR:",
+            audio.error
+          );
+
           setIsPlaying(false);
+          setIsLoading(false);
+
           setSoundStatus(
-            "Unable to load this audio file."
+            "Unable to load this MP3. Check the audio file."
           );
         }
       );
 
-      setSoundStatus(
-        `Loading ${selectedSound.title}...`
-      );
+      audio.src = selectedSound.file;
 
-      await audio.play();
+      audio.load();
 
-      setIsPlaying(true);
+      const playPromise = audio.play();
 
-      setSoundStatus(
-        `${selectedSound.title} is playing.`
-      );
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsLoading(false);
+            setIsPlaying(true);
+
+            setSoundStatus(
+              `${selectedSound.title} is playing.`
+            );
+          })
+          .catch((error) => {
+            console.error(
+              "BOMBA AUDIO PLAY ERROR:",
+              error
+            );
+
+            setIsPlaying(false);
+            setIsLoading(false);
+
+            setSoundStatus(
+              "Audio could not be played. Check the MP3 file."
+            );
+          });
+      }
     } catch (error) {
       console.error(
         "BOMBA SOUND PLAYER ERROR:",
@@ -265,6 +321,7 @@ export default function StudioBoard() {
       );
 
       setIsPlaying(false);
+      setIsLoading(false);
 
       setSoundStatus(
         "Audio could not be played. Check the MP3 file."
@@ -303,9 +360,7 @@ export default function StudioBoard() {
           "rgba(255,255,255,0.025)",
       }}
     >
-      {/* ===================================================
-          HEADER
-      =================================================== */}
+      {/* HEADER */}
 
       <div style={{ marginBottom: "12px" }}>
         <div
@@ -340,9 +395,7 @@ export default function StudioBoard() {
         </p>
       </div>
 
-      {/* ===================================================
-          PRODUCTION MODULES
-      =================================================== */}
+      {/* PRODUCTION MODULES */}
 
       <div
         style={{
@@ -421,9 +474,7 @@ export default function StudioBoard() {
         ))}
       </div>
 
-      {/* ===================================================
-          SOUND STUDIO
-      =================================================== */}
+      {/* SOUND STUDIO */}
 
       {activeModule === "SOUND" && (
         <div
@@ -696,9 +747,7 @@ export default function StudioBoard() {
               max="100"
               value={volume}
               onChange={(event) =>
-                updateVolume(
-                  event.target.value
-                )
+                updateVolume(event.target.value)
               }
               style={{
                 width: "100%",
@@ -712,6 +761,7 @@ export default function StudioBoard() {
           <button
             type="button"
             onClick={previewSound}
+            disabled={isLoading}
             style={{
               width: "100%",
               marginTop: "10px",
@@ -719,16 +769,24 @@ export default function StudioBoard() {
               borderRadius: "9px",
               border:
                 "1px solid rgba(255,212,59,0.35)",
-              background: isPlaying
-                ? "rgba(255,80,80,0.10)"
-                : "rgba(255,212,59,0.10)",
+              background:
+                isPlaying
+                  ? "rgba(255,80,80,0.10)"
+                  : "rgba(255,212,59,0.10)",
               color: "inherit",
               fontSize: "11px",
               fontWeight: "800",
-              cursor: "pointer",
+              cursor:
+                isLoading
+                  ? "wait"
+                  : "pointer",
+              opacity:
+                isLoading ? 0.7 : 1,
             }}
           >
-            {isPlaying
+            {isLoading
+              ? "⏳ LOADING SOUND..."
+              : isPlaying
               ? "⏹️ STOP SOUND"
               : "▶️ PREVIEW SOUND"}
           </button>
