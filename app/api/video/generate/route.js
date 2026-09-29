@@ -3,15 +3,15 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const FAL_KEY = process.env.FAL_KEY;
+const ETERNALAI_API_KEY = process.env.ETERNALAI_API_KEY;
 
-const FAL_MODEL = "fal-ai/wan/v2.2-a14b/image-to-video";
+const ETERNALAI_BASE_URL = "https://open.eternalai.org";
 
-const FAL_SUBMIT_URL =
-  `https://queue.fal.run/${FAL_MODEL}`;
+const ETERNALAI_SUBMIT_URL =
+  `${ETERNALAI_BASE_URL}/api/image-to-video`;
 
-const FAL_STATUS_BASE =
-  `https://queue.fal.run/${FAL_MODEL}/requests`;
+const ETERNALAI_MODEL =
+  "wan-ai/wan2.2-i2v-a14b-lightning";
 
 const DEFAULT_NEGATIVE_PROMPT =
   "blurry, low quality, distorted face, deformed body, extra fingers, extra limbs, bad anatomy, unrealistic movement, flickering, duplicate person, text, watermark, logo, nsfw, nudity";
@@ -55,7 +55,10 @@ async function proxyVideo(videoUrl) {
       },
     });
   } catch (error) {
-    console.error("BOMBA FAL PROXY ERROR:", error);
+    console.error(
+      "BOMBA ETERNAL AI PROXY ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -68,17 +71,17 @@ async function proxyVideo(videoUrl) {
 }
 
 /* =========================================================
-   POST → START GENERATION
+   POST → START ETERNAL AI GENERATION
    ========================================================= */
 
 export async function POST(request) {
   try {
-    if (!FAL_KEY) {
+    if (!ETERNALAI_API_KEY) {
       return NextResponse.json(
         {
           status: "failed",
           error:
-            "FAL_KEY is not configured in Vercel.",
+            "ETERNALAI_API_KEY is not configured in Vercel.",
         },
         { status: 500 }
       );
@@ -122,78 +125,90 @@ export async function POST(request) {
       );
     }
 
+    /*
+     * Eternal AI accepts either a publicly reachable
+     * image URL or a base64 data URI.
+     *
+     * Maximum image size: 15 MB.
+     */
+
     const finalPrompt = `${prompt}
 
 Photorealistic live-action video, cinematic lighting, natural human movement, realistic skin texture, realistic facial expressions, natural body proportions, detailed environment, high quality.`;
 
     /*
-     * 81 frames / 16 FPS ≈ 5 seconds
+     * BOMBA first test:
      *
-     * These values are supported by the current
-     * fal.ai Wan 2.2 A14B image-to-video schema.
+     * 5 seconds
+     * 480p
+     *
+     * Eternal AI current pricing:
+     * $0.005 per generated second
+     * 5 seconds = $0.025
+     *
+     * Duration MUST be a string.
      */
 
     const payload = {
-      image_url: imageData,
       prompt: finalPrompt,
-      negative_prompt: DEFAULT_NEGATIVE_PROMPT,
 
-      num_frames: 81,
-      frames_per_second: 16,
+      image_url: imageData,
 
-      resolution: "720p",
+      model_id: ETERNALAI_MODEL,
+
+      duration: "5",
+
       aspect_ratio: "16:9",
 
-      num_inference_steps: 27,
+      resolution: "480p",
 
-      enable_safety_checker: true,
+      negative_prompt:
+        DEFAULT_NEGATIVE_PROMPT,
 
-      enable_output_safety_checker: false,
-
-      num_interpolated_frames: 0,
-      adjust_fps_for_interpolation: false,
-
-      video_quality: "balanced",
-      video_write_mode: "fast",
+      cfg_scale: 0.5,
     };
 
     console.log(
-      "BOMBA FAL STARTING:",
+      "BOMBA ETERNAL AI STARTING:",
       {
-        model: FAL_MODEL,
+        model: ETERNALAI_MODEL,
         mode,
-        frames: 81,
-        fps: 16,
-        duration: "approximately 5 seconds",
-        resolution: "720p",
+        duration: "5 seconds",
+        resolution: "480p",
+        aspectRatio: "16:9",
       }
     );
 
     const response = await fetch(
-      FAL_SUBMIT_URL,
+      ETERNALAI_SUBMIT_URL,
       {
         method: "POST",
 
         headers: {
-          Authorization: `Key ${FAL_KEY}`,
-          "Content-Type": "application/json",
+          Authorization:
+            `Bearer ${ETERNALAI_API_KEY}`,
+
+          "Content-Type":
+            "application/json",
         },
 
         body: JSON.stringify(payload),
       }
     );
 
-    const text = await response.text();
+    const text =
+      await response.text();
 
-    const data = safeParse(text);
+    const data =
+      safeParse(text);
 
     console.log(
-      "BOMBA FAL START STATUS:",
+      "BOMBA ETERNAL AI START STATUS:",
       response.status
     );
 
     console.log(
-      "BOMBA FAL START RESPONSE:",
+      "BOMBA ETERNAL AI START RESPONSE:",
       text.slice(0, 1500)
     );
 
@@ -202,16 +217,18 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
         {
           status: "failed",
           error:
-            data?.detail ||
             data?.error ||
-            `fal.ai returned HTTP ${response.status}`,
+            data?.detail ||
+            `Eternal AI returned HTTP ${response.status}`,
+
           raw: text.slice(0, 1000),
         },
-        { status: 502 }
+        { status: response.status === 402 ? 402 : 502 }
       );
     }
 
     const requestId =
+      data?.result?.request_id ||
       data?.request_id ||
       data?.id;
 
@@ -220,7 +237,8 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
         {
           status: "failed",
           error:
-            "fal.ai did not return a request ID.",
+            "Eternal AI did not return a request ID.",
+
           raw: text.slice(0, 1000),
         },
         { status: 502 }
@@ -228,25 +246,29 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
     }
 
     console.log(
-      "BOMBA FAL REQUEST ID:",
+      "BOMBA ETERNAL AI REQUEST ID:",
       requestId
     );
 
     return NextResponse.json({
       status: "queued",
+
       id: requestId,
+
       jobId: requestId,
+
       predictionId: requestId,
     });
   } catch (error) {
     console.error(
-      "BOMBA FAL POST ERROR:",
+      "BOMBA ETERNAL AI POST ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         status: "failed",
+
         error:
           error?.message ||
           "Unexpected error while starting video generation.",
@@ -262,11 +284,13 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
 
 export async function GET(request) {
   try {
-    if (!FAL_KEY) {
+    if (!ETERNALAI_API_KEY) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "FAL_KEY is missing.",
+
+          error:
+            "ETERNALAI_API_KEY is missing.",
         },
         { status: 500 }
       );
@@ -285,38 +309,42 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "Missing generation ID.",
+
+          error:
+            "Missing generation ID.",
         },
         { status: 400 }
       );
     }
 
     /* -----------------------------------------
-       CHECK STATUS
+       CHECK ETERNAL AI STATUS
     ----------------------------------------- */
 
     const statusUrl =
-      `${FAL_STATUS_BASE}/${encodeURIComponent(
+      `${ETERNALAI_BASE_URL}/api/image-to-video/${encodeURIComponent(
         requestId
       )}/status`;
 
     console.log(
-      "BOMBA FAL STATUS URL:",
+      "BOMBA ETERNAL AI STATUS URL:",
       statusUrl
     );
 
-    const statusRes = await fetch(
-      statusUrl,
-      {
-        method: "GET",
+    const statusRes =
+      await fetch(
+        statusUrl,
+        {
+          method: "GET",
 
-        headers: {
-          Authorization: `Key ${FAL_KEY}`,
-        },
+          headers: {
+            Authorization:
+              `Bearer ${ETERNALAI_API_KEY}`,
+          },
 
-        cache: "no-store",
-      }
-    );
+          cache: "no-store",
+        }
+      );
 
     const statusText =
       await statusRes.text();
@@ -325,31 +353,70 @@ export async function GET(request) {
       safeParse(statusText);
 
     console.log(
-      "BOMBA FAL STATUS RESPONSE:",
-      statusText.slice(0, 1000)
+      "BOMBA ETERNAL AI STATUS RESPONSE:",
+      statusText.slice(0, 1200)
     );
 
     if (!statusRes.ok) {
       return NextResponse.json(
         {
           status: "failed",
+
           error:
-            `fal.ai status check failed (HTTP ${statusRes.status})`,
+            statusData?.error ||
+            statusData?.detail ||
+            `Eternal AI status check failed (HTTP ${statusRes.status})`,
+
           raw: statusText.slice(0, 800),
+
           jobId: requestId,
         },
-        { status: 502 }
+
+        {
+          status: statusRes.status === 404
+            ? 502
+            : 502,
+        }
       );
     }
 
-    const status =
+    /*
+     * Eternal AI response:
+     *
+     * {
+     *   status: true,
+     *   result: {
+     *     request_id: "...",
+     *     status: "pending",
+     *     progress: 20,
+     *     video_url: null
+     *   }
+     * }
+     */
+
+    const result =
+      statusData?.result ||
+      {};
+
+    const generationStatus =
       String(
-        statusData?.status || ""
-      ).toUpperCase();
+        result?.status ||
+        ""
+      ).toLowerCase();
+
+    const progress =
+      result?.progress ?? null;
 
     console.log(
-      "BOMBA FAL JOB STATUS:",
-      status
+      "BOMBA ETERNAL AI JOB STATUS:",
+      {
+        requestId,
+
+        status:
+          generationStatus,
+
+        progress,
+      }
     );
 
     /* -----------------------------------------
@@ -357,13 +424,20 @@ export async function GET(request) {
     ----------------------------------------- */
 
     if (
-      status === "IN_QUEUE" ||
-      status === "IN_PROGRESS"
+      generationStatus === "pending" ||
+      generationStatus === "processing" ||
+      generationStatus === "queued" ||
+      generationStatus === "in_queue" ||
+      generationStatus === "in_progress"
     ) {
       return NextResponse.json({
         status: "processing",
+
         jobId: requestId,
+
         id: requestId,
+
+        progress,
       });
     }
 
@@ -372,19 +446,24 @@ export async function GET(request) {
     ----------------------------------------- */
 
     if (
-      status === "FAILED" ||
-      status === "ERROR"
+      generationStatus === "failed" ||
+      generationStatus === "error"
     ) {
       return NextResponse.json(
         {
           status: "failed",
+
           error:
+            result?.error ||
             statusData?.error ||
-            statusData?.detail ||
-            "fal.ai video generation failed.",
+            "Eternal AI video generation failed.",
+
           jobId: requestId,
         },
-        { status: 502 }
+
+        {
+          status: 502,
+        }
       );
     }
 
@@ -393,89 +472,68 @@ export async function GET(request) {
     ----------------------------------------- */
 
     if (
-      status === "COMPLETED" ||
-      status === "OK"
+      generationStatus === "completed" ||
+      generationStatus === "success" ||
+      generationStatus === "succeeded"
     ) {
-      const resultUrl =
-        `${FAL_STATUS_BASE}/${encodeURIComponent(
-          requestId
-        )}`;
-
-      console.log(
-        "BOMBA FAL RESULT URL:",
-        resultUrl
-      );
-
-      const resultRes =
-        await fetch(
-          resultUrl,
-          {
-            method: "GET",
-
-            headers: {
-              Authorization: `Key ${FAL_KEY}`,
-            },
-
-            cache: "no-store",
-          }
-        );
-
-      const resultText =
-        await resultRes.text();
-
-      const resultData =
-        safeParse(resultText);
-
-      console.log(
-        "BOMBA FAL RESULT:",
-        resultText.slice(0, 1500)
-      );
-
-      if (!resultRes.ok) {
-        return NextResponse.json(
-          {
-            status: "failed",
-            error:
-              `fal.ai result request failed (HTTP ${resultRes.status})`,
-            raw: resultText.slice(
-              0,
-              1000
-            ),
-            jobId: requestId,
-          },
-          { status: 502 }
-        );
-      }
-
       const videoUrl =
-        resultData?.video?.url ||
-        resultData?.data?.video?.url ||
-        resultData?.output?.video?.url ||
-        resultData?.video_url ||
+        result?.video_url ||
+        result?.video?.url ||
+        statusData?.video_url ||
+        statusData?.video?.url ||
         null;
 
       if (!videoUrl) {
         return NextResponse.json(
           {
             status: "failed",
+
             error:
-              "Generation completed but fal.ai returned no video URL.",
-            raw: resultText.slice(
-              0,
-              1000
-            ),
+              "Generation completed but Eternal AI returned no video URL.",
+
+            raw:
+              statusText.slice(
+                0,
+                1000
+              ),
+
             jobId: requestId,
           },
-          { status: 502 }
+
+          {
+            status: 502,
+          }
         );
       }
 
       console.log(
-        "BOMBA FAL VIDEO URL:",
+        "BOMBA ETERNAL AI VIDEO URL:",
         videoUrl
       );
 
+      /*
+       * Download the Eternal AI CDN video
+       * through BOMBA so the browser does not
+       * need to communicate directly with
+       * Eternal AI.
+       */
+
       return proxyVideo(videoUrl);
+    }
+
+    /* -----------------------------------------
+       VIDEO URL EXISTS
+       ----------------------------------------- */
+
+    if (result?.video_url) {
+      console.log(
+        "BOMBA ETERNAL AI VIDEO URL:",
+        result.video_url
+      );
+
+      return proxyVideo(
+        result.video_url
+      );
     }
 
     /* -----------------------------------------
@@ -484,21 +542,26 @@ export async function GET(request) {
 
     return NextResponse.json({
       status: "processing",
+
       jobId: requestId,
+
       id: requestId,
+
+      progress,
     });
   } catch (error) {
     console.error(
-      "BOMBA FAL GET ERROR:",
+      "BOMBA ETERNAL AI GET ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         status: "failed",
+
         error:
           error?.message ||
-          "Error while checking video generation.",
+          "Error while checking Eternal AI video generation.",
       },
       { status: 500 }
     );
