@@ -3,26 +3,19 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// ────────────────────────────────────────────────
-// fal.ai Configuration
-// ────────────────────────────────────────────────
 const FAL_KEY = process.env.FAL_KEY;
 
-if (!FAL_KEY) {
-  console.warn("⚠️ FAL_KEY is missing. Add it in Vercel Environment Variables.");
-}
+const FAL_MODEL = "fal-ai/wan/v2.2-a14b/image-to-video";
 
-// Recommended model: Wan 2.2 Image-to-Video (reliable + good quality)
-const FAL_MODEL = "fal-ai/wan/v2.2/image-to-video";
-const FAL_SUBMIT_URL = `https://queue.fal.run/${FAL_MODEL}`;
-const FAL_STATUS_BASE = `https://queue.fal.run/${FAL_MODEL}/requests`;
+const FAL_SUBMIT_URL =
+  `https://queue.fal.run/${FAL_MODEL}`;
+
+const FAL_STATUS_BASE =
+  `https://queue.fal.run/${FAL_MODEL}/requests`;
 
 const DEFAULT_NEGATIVE_PROMPT =
   "blurry, low quality, distorted face, deformed body, extra fingers, extra limbs, bad anatomy, unrealistic movement, flickering, duplicate person, text, watermark, logo, nsfw, nudity";
 
-/**
- * Safely parse JSON
- */
 function safeParse(text) {
   try {
     return JSON.parse(text);
@@ -31,12 +24,11 @@ function safeParse(text) {
   }
 }
 
-/**
- * Proxy the final video so the browser downloads it from your domain
- */
 async function proxyVideo(videoUrl) {
   try {
-    const response = await fetch(videoUrl, { cache: "no-store" });
+    const response = await fetch(videoUrl, {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -48,7 +40,10 @@ async function proxyVideo(videoUrl) {
       );
     }
 
-    const contentType = response.headers.get("content-type") || "video/mp4";
+    const contentType =
+      response.headers.get("content-type") ||
+      "video/mp4";
+
     const buffer = await response.arrayBuffer();
 
     return new NextResponse(buffer, {
@@ -59,25 +54,31 @@ async function proxyVideo(videoUrl) {
         "Cache-Control": "public, max-age=3600",
       },
     });
-  } catch (err) {
-    console.error("BOMBA PROXY ERROR:", err);
+  } catch (error) {
+    console.error("BOMBA FAL PROXY ERROR:", error);
+
     return NextResponse.json(
-      { status: "failed", error: "Could not proxy the generated video." },
+      {
+        status: "failed",
+        error: "Could not proxy the generated video.",
+      },
       { status: 502 }
     );
   }
 }
 
 /* =========================================================
-   POST → Start generation
+   POST → START GENERATION
    ========================================================= */
+
 export async function POST(request) {
   try {
     if (!FAL_KEY) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "FAL_KEY is not configured. Please add it in Vercel.",
+          error:
+            "FAL_KEY is not configured in Vercel.",
         },
         { status: 500 }
       );
@@ -86,87 +87,151 @@ export async function POST(request) {
     const body = await request.json();
 
     const imageData =
-      body?.imageData || body?.image || body?.characterImage || null;
-    const prompt = (body?.prompt || "").trim();
-    const mode = body?.mode || "Story";
+      body?.imageData ||
+      body?.image ||
+      body?.characterImage ||
+      null;
+
+    const prompt =
+      typeof body?.prompt === "string"
+        ? body.prompt.trim()
+        : "";
+
+    const mode =
+      body?.mode || "Story";
 
     if (!imageData) {
       return NextResponse.json(
-        { status: "failed", error: "Please upload a character photo first." },
+        {
+          status: "failed",
+          error:
+            "Please upload a character photo first.",
+        },
         { status: 400 }
       );
     }
 
     if (!prompt) {
       return NextResponse.json(
-        { status: "failed", error: "Please describe the video you want." },
+        {
+          status: "failed",
+          error:
+            "Please describe the video you want.",
+        },
         { status: 400 }
       );
     }
 
-    // Make the prompt stronger for realistic results
     const finalPrompt = `${prompt}
 
-Photorealistic live-action video, cinematic lighting, natural human movement, realistic skin texture, realistic facial expressions, natural body proportions, detailed environment, high quality, 24fps.`;
+Photorealistic live-action video, cinematic lighting, natural human movement, realistic skin texture, realistic facial expressions, natural body proportions, detailed environment, high quality.`;
 
-    // Payload for fal.ai Wan 2.2 I2V
+    /*
+     * 81 frames / 16 FPS ≈ 5 seconds
+     *
+     * These values are supported by the current
+     * fal.ai Wan 2.2 A14B image-to-video schema.
+     */
+
     const payload = {
-      image_url: imageData, // can be base64 data URL or public URL
+      image_url: imageData,
       prompt: finalPrompt,
       negative_prompt: DEFAULT_NEGATIVE_PROMPT,
-      num_frames: 81, // ≈ 5 seconds at 16 fps
+
+      num_frames: 81,
       frames_per_second: 16,
+
       resolution: "720p",
       aspect_ratio: "16:9",
-      guidance_scale: 5.0,
-      num_inference_steps: 30,
+
+      num_inference_steps: 27,
+
       enable_safety_checker: true,
+
+      enable_output_safety_checker: false,
+
+      num_interpolated_frames: 0,
+      adjust_fps_for_interpolation: false,
+
+      video_quality: "balanced",
+      video_write_mode: "fast",
     };
 
-    console.log("BOMBA FAL → Starting generation | Mode:", mode);
+    console.log(
+      "BOMBA FAL STARTING:",
+      {
+        model: FAL_MODEL,
+        mode,
+        frames: 81,
+        fps: 16,
+        duration: "approximately 5 seconds",
+        resolution: "720p",
+      }
+    );
 
-    const response = await fetch(FAL_SUBMIT_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${FAL_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    const response = await fetch(
+      FAL_SUBMIT_URL,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Key ${FAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify(payload),
+      }
+    );
 
     const text = await response.text();
+
     const data = safeParse(text);
 
-    console.log("BOMBA FAL START STATUS:", response.status);
-    console.log("BOMBA FAL START BODY:", text.slice(0, 800));
+    console.log(
+      "BOMBA FAL START STATUS:",
+      response.status
+    );
+
+    console.log(
+      "BOMBA FAL START RESPONSE:",
+      text.slice(0, 1500)
+    );
 
     if (!response.ok) {
       return NextResponse.json(
         {
           status: "failed",
-          error: data?.detail || data?.error || "Failed to start generation on fal.ai",
+          error:
+            data?.detail ||
+            data?.error ||
+            `fal.ai returned HTTP ${response.status}`,
           raw: text.slice(0, 1000),
         },
         { status: 502 }
       );
     }
 
-    const requestId = data?.request_id || data?.id;
+    const requestId =
+      data?.request_id ||
+      data?.id;
 
     if (!requestId) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "fal.ai did not return a request_id",
+          error:
+            "fal.ai did not return a request ID.",
           raw: text.slice(0, 1000),
         },
         { status: 502 }
       );
     }
 
-    console.log("BOMBA FAL REQUEST ID:", requestId);
+    console.log(
+      "BOMBA FAL REQUEST ID:",
+      requestId
+    );
 
-    // Keep the same response shape your frontend expects
     return NextResponse.json({
       status: "queued",
       id: requestId,
@@ -174,11 +239,17 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       predictionId: requestId,
     });
   } catch (error) {
-    console.error("BOMBA FAL POST ERROR:", error);
+    console.error(
+      "BOMBA FAL POST ERROR:",
+      error
+    );
+
     return NextResponse.json(
       {
         status: "failed",
-        error: error?.message || "Unexpected error while starting generation",
+        error:
+          error?.message ||
+          "Unexpected error while starting video generation.",
       },
       { status: 500 }
     );
@@ -186,18 +257,24 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
 }
 
 /* =========================================================
-   GET → Poll status / return video
+   GET → CHECK STATUS / RETURN VIDEO
    ========================================================= */
+
 export async function GET(request) {
   try {
     if (!FAL_KEY) {
       return NextResponse.json(
-        { status: "failed", error: "FAL_KEY is missing" },
+        {
+          status: "failed",
+          error: "FAL_KEY is missing.",
+        },
         { status: 500 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
+    const { searchParams } =
+      new URL(request.url);
+
     const requestId =
       searchParams.get("id") ||
       searchParams.get("jobId") ||
@@ -206,29 +283,58 @@ export async function GET(request) {
 
     if (!requestId) {
       return NextResponse.json(
-        { status: "failed", error: "Missing generation ID" },
+        {
+          status: "failed",
+          error: "Missing generation ID.",
+        },
         { status: 400 }
       );
     }
 
-    // 1. Check status
-    const statusRes = await fetch(`\( {FAL_STATUS_BASE}/ \){requestId}/status`, {
-      headers: {
-        Authorization: `Key ${FAL_KEY}`,
-      },
-      cache: "no-store",
-    });
+    /* -----------------------------------------
+       CHECK STATUS
+    ----------------------------------------- */
 
-    const statusText = await statusRes.text();
-    const statusData = safeParse(statusText);
+    const statusUrl =
+      `${FAL_STATUS_BASE}/${encodeURIComponent(
+        requestId
+      )}/status`;
 
-    console.log("BOMBA FAL STATUS:", statusText.slice(0, 600));
+    console.log(
+      "BOMBA FAL STATUS URL:",
+      statusUrl
+    );
+
+    const statusRes = await fetch(
+      statusUrl,
+      {
+        method: "GET",
+
+        headers: {
+          Authorization: `Key ${FAL_KEY}`,
+        },
+
+        cache: "no-store",
+      }
+    );
+
+    const statusText =
+      await statusRes.text();
+
+    const statusData =
+      safeParse(statusText);
+
+    console.log(
+      "BOMBA FAL STATUS RESPONSE:",
+      statusText.slice(0, 1000)
+    );
 
     if (!statusRes.ok) {
       return NextResponse.json(
         {
           status: "failed",
-          error: `Status check failed (HTTP ${statusRes.status})`,
+          error:
+            `fal.ai status check failed (HTTP ${statusRes.status})`,
           raw: statusText.slice(0, 800),
           jobId: requestId,
         },
@@ -236,10 +342,24 @@ export async function GET(request) {
       );
     }
 
-    const status = (statusData?.status || "").toUpperCase();
+    const status =
+      String(
+        statusData?.status || ""
+      ).toUpperCase();
 
-    // Still processing
-    if (status === "IN_QUEUE" || status === "IN_PROGRESS") {
+    console.log(
+      "BOMBA FAL JOB STATUS:",
+      status
+    );
+
+    /* -----------------------------------------
+       STILL WORKING
+    ----------------------------------------- */
+
+    if (
+      status === "IN_QUEUE" ||
+      status === "IN_PROGRESS"
+    ) {
       return NextResponse.json({
         status: "processing",
         jobId: requestId,
@@ -247,34 +367,85 @@ export async function GET(request) {
       });
     }
 
-    // Failed
-    if (status === "FAILED" || status === "ERROR") {
+    /* -----------------------------------------
+       FAILED
+    ----------------------------------------- */
+
+    if (
+      status === "FAILED" ||
+      status === "ERROR"
+    ) {
       return NextResponse.json(
         {
           status: "failed",
           error:
             statusData?.error ||
             statusData?.detail ||
-            "Generation failed on fal.ai",
+            "fal.ai video generation failed.",
           jobId: requestId,
         },
         { status: 502 }
       );
     }
 
-    // Completed → get the result
-    if (status === "COMPLETED" || status === "OK") {
-      const resultRes = await fetch(`\( {FAL_STATUS_BASE}/ \){requestId}`, {
-        headers: {
-          Authorization: `Key ${FAL_KEY}`,
-        },
-        cache: "no-store",
-      });
+    /* -----------------------------------------
+       COMPLETED
+    ----------------------------------------- */
 
-      const resultText = await resultRes.text();
-      const resultData = safeParse(resultText);
+    if (
+      status === "COMPLETED" ||
+      status === "OK"
+    ) {
+      const resultUrl =
+        `${FAL_STATUS_BASE}/${encodeURIComponent(
+          requestId
+        )}`;
 
-      console.log("BOMBA FAL RESULT:", resultText.slice(0, 800));
+      console.log(
+        "BOMBA FAL RESULT URL:",
+        resultUrl
+      );
+
+      const resultRes =
+        await fetch(
+          resultUrl,
+          {
+            method: "GET",
+
+            headers: {
+              Authorization: `Key ${FAL_KEY}`,
+            },
+
+            cache: "no-store",
+          }
+        );
+
+      const resultText =
+        await resultRes.text();
+
+      const resultData =
+        safeParse(resultText);
+
+      console.log(
+        "BOMBA FAL RESULT:",
+        resultText.slice(0, 1500)
+      );
+
+      if (!resultRes.ok) {
+        return NextResponse.json(
+          {
+            status: "failed",
+            error:
+              `fal.ai result request failed (HTTP ${resultRes.status})`,
+            raw: resultText.slice(
+              0,
+              1000
+            ),
+            jobId: requestId,
+          },
+          { status: 502 }
+        );
+      }
 
       const videoUrl =
         resultData?.video?.url ||
@@ -283,34 +454,51 @@ export async function GET(request) {
         resultData?.video_url ||
         null;
 
-      if (videoUrl) {
-        console.log("BOMBA FAL VIDEO URL:", videoUrl);
-        return proxyVideo(videoUrl);
+      if (!videoUrl) {
+        return NextResponse.json(
+          {
+            status: "failed",
+            error:
+              "Generation completed but fal.ai returned no video URL.",
+            raw: resultText.slice(
+              0,
+              1000
+            ),
+            jobId: requestId,
+          },
+          { status: 502 }
+        );
       }
 
-      return NextResponse.json(
-        {
-          status: "failed",
-          error: "Generation completed but no video URL was found",
-          raw: resultText.slice(0, 1000),
-          jobId: requestId,
-        },
-        { status: 502 }
+      console.log(
+        "BOMBA FAL VIDEO URL:",
+        videoUrl
       );
+
+      return proxyVideo(videoUrl);
     }
 
-    // Unknown status → treat as still processing
+    /* -----------------------------------------
+       UNKNOWN STATUS
+    ----------------------------------------- */
+
     return NextResponse.json({
       status: "processing",
       jobId: requestId,
       id: requestId,
     });
   } catch (error) {
-    console.error("BOMBA FAL GET ERROR:", error);
+    console.error(
+      "BOMBA FAL GET ERROR:",
+      error
+    );
+
     return NextResponse.json(
       {
         status: "failed",
-        error: error?.message || "Error while checking generation status",
+        error:
+          error?.message ||
+          "Error while checking video generation.",
       },
       { status: 500 }
     );
