@@ -72,7 +72,7 @@ const soundLibrary = {
       id: "cinematic-background",
       title: "Subtle Background",
       description: "Cinematic background music by AudioDollar.",
-      file: "/audio/music/cinematic-background.mp3",
+      file: "/audio/music/subtle-background.mp3",
       creator: "AudioDollar",
       source: "Pixabay",
     },
