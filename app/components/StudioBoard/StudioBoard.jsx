@@ -122,6 +122,10 @@ const soundLibrary = {
 export default function StudioBoard() {
   const [activeModule, setActiveModule] = useState(null);
 
+  /* =======================================================
+     LIBRARY SOUND STATE
+  ======================================================= */
+
   const [soundCategory, setSoundCategory] =
     useState("Licensed Music");
 
@@ -159,51 +163,50 @@ export default function StudioBoard() {
     useState(false);
 
   const [generatedSoundStatus, setGeneratedSoundStatus] =
+    useState(
+      "Ready to create AI sound."
+    );
+
+  const [generatedSoundError, setGeneratedSoundError] =
     useState("");
 
-  const generatedAudioRef = useRef(null);
+  /* =======================================================
+     AUDIO REFERENCES
+  ======================================================= */
 
   const audioRef = useRef(null);
+
+  const generatedAudioRef = useRef(null);
 
   const currentSounds =
     soundLibrary[soundCategory] || [];
 
   /* =======================================================
-     CLEAN UP AUDIO
+     CLEANUP
   ======================================================= */
 
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.removeAttribute("src");
-        audioRef.current.load();
-        audioRef.current = null;
-      }
-
-      if (generatedAudioRef.current) {
-        generatedAudioRef.current.pause();
-        generatedAudioRef.current = null;
-      }
+      stopAllAudio();
     };
   }, []);
 
   /* =======================================================
-     STOP LIBRARY SOUND
+     STOP LIBRARY AUDIO
   ======================================================= */
 
-  function stopSound() {
+  function stopLibrarySound() {
     if (audioRef.current) {
-      audioRef.current.pause();
-
       try {
+        audioRef.current.pause();
         audioRef.current.currentTime = 0;
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
       } catch (error) {
-        console.log("Audio reset skipped.");
+        console.log(
+          "Library audio cleanup skipped."
+        );
       }
-
-      audioRef.current.removeAttribute("src");
-      audioRef.current.load();
 
       audioRef.current = null;
     }
@@ -213,13 +216,42 @@ export default function StudioBoard() {
   }
 
   /* =======================================================
+     STOP GENERATED AUDIO
+  ======================================================= */
+
+  function stopGeneratedSound() {
+    if (generatedAudioRef.current) {
+      try {
+        generatedAudioRef.current.pause();
+        generatedAudioRef.current.currentTime = 0;
+      } catch (error) {
+        console.log(
+          "Generated audio cleanup skipped."
+        );
+      }
+
+      generatedAudioRef.current = null;
+    }
+  }
+
+  /* =======================================================
+     STOP EVERYTHING
+  ======================================================= */
+
+  function stopAllAudio() {
+    stopLibrarySound();
+    stopGeneratedSound();
+  }
+
+  /* =======================================================
      SELECT SOUND CATEGORY
   ======================================================= */
 
   function selectCategory(category) {
-    stopSound();
+    stopLibrarySound();
 
     setSoundCategory(category);
+
     setSelectedSound(null);
 
     setSoundStatus(
@@ -232,7 +264,7 @@ export default function StudioBoard() {
   ======================================================= */
 
   function selectSound(sound) {
-    stopSound();
+    stopLibrarySound();
 
     setSelectedSound(sound);
 
@@ -248,111 +280,108 @@ export default function StudioBoard() {
   function previewSound() {
     if (!selectedSound) {
       setSoundStatus(
-        "Choose a sound before previewing."
+        "⚠️ Choose a sound first."
       );
       return;
     }
 
-    if (isPlaying || isLoading) {
-      stopSound();
-      setSoundStatus("Sound stopped.");
-      return;
-    }
-
-    try {
-      stopSound();
-
-      setIsLoading(true);
+    if (isPlaying) {
+      stopLibrarySound();
 
       setSoundStatus(
-        `Loading ${selectedSound.title}...`
+        "⏹️ Sound stopped."
       );
 
+      return;
+    }
+
+    stopGeneratedSound();
+    stopLibrarySound();
+
+    setIsLoading(true);
+
+    setSoundStatus(
+      `⏳ Loading ${selectedSound.title}...`
+    );
+
+    try {
       const audio = new Audio();
 
       audio.preload = "auto";
-      audio.volume = volume / 100;
+
+      audio.volume =
+        Number(volume) / 100;
 
       audioRef.current = audio;
 
-      audio.addEventListener(
-        "canplay",
-        () => {
-          setIsLoading(false);
-        },
-        { once: true }
-      );
+      audio.oncanplay = () => {
+        setIsLoading(false);
+      };
 
-      audio.addEventListener(
-        "ended",
-        () => {
-          setIsPlaying(false);
-          setIsLoading(false);
+      audio.onended = () => {
+        setIsPlaying(false);
+        setIsLoading(false);
 
-          setSoundStatus(
-            "Sound finished. Ready again."
-          );
-        }
-      );
+        setSoundStatus(
+          "🎵 Sound finished. Ready again."
+        );
+      };
 
-      audio.addEventListener(
-        "error",
-        () => {
-          console.error(
-            "BOMBA AUDIO ERROR:",
-            audio.error
-          );
+      audio.onerror = () => {
+        console.error(
+          "BOMBA LIBRARY AUDIO ERROR:",
+          audio.error
+        );
 
-          setIsPlaying(false);
-          setIsLoading(false);
+        setIsPlaying(false);
+        setIsLoading(false);
 
-          setSoundStatus(
-            "Unable to load this MP3. Check the audio file."
-          );
-        }
-      );
+        setSoundStatus(
+          `❌ Unable to load ${selectedSound.title}. Check the MP3 path.`
+        );
+      };
 
       audio.src = selectedSound.file;
 
       audio.load();
 
-      const playPromise = audio.play();
+      const promise = audio.play();
 
-      if (playPromise !== undefined) {
-        playPromise
+      if (promise) {
+        promise
           .then(() => {
             setIsLoading(false);
             setIsPlaying(true);
 
             setSoundStatus(
-              `${selectedSound.title} is playing.`
+              `▶️ ${selectedSound.title} is playing.`
             );
           })
           .catch((error) => {
             console.error(
-              "BOMBA AUDIO PLAY ERROR:",
+              "BOMBA LIBRARY PLAY ERROR:",
               error
             );
 
-            setIsPlaying(false);
             setIsLoading(false);
+            setIsPlaying(false);
 
             setSoundStatus(
-              "Audio could not be played. Check the MP3 file."
+              "❌ Browser could not play this audio file."
             );
           });
       }
     } catch (error) {
       console.error(
-        "BOMBA SOUND PLAYER ERROR:",
+        "BOMBA LIBRARY AUDIO ERROR:",
         error
       );
 
-      setIsPlaying(false);
       setIsLoading(false);
+      setIsPlaying(false);
 
       setSoundStatus(
-        "Audio could not be played. Check the MP3 file."
+        "❌ Unable to play this sound."
       );
     }
   }
@@ -362,7 +391,8 @@ export default function StudioBoard() {
   ======================================================= */
 
   function updateVolume(value) {
-    const nextVolume = Number(value);
+    const nextVolume =
+      Number(value);
 
     setVolume(nextVolume);
 
@@ -378,43 +408,86 @@ export default function StudioBoard() {
   }
 
   /* =======================================================
-     GENERATE REAL AI SOUND
+     GENERATE AI SOUND
   ======================================================= */
 
   async function generateAISound() {
-    if (!soundPrompt.trim()) {
-      setGeneratedSoundStatus(
+    const cleanPrompt =
+      soundPrompt.trim();
+
+    if (!cleanPrompt) {
+      setGeneratedSoundError(
         "Enter a sound description first."
       );
+
+      setGeneratedSoundStatus(
+        "⚠️ Sound description is required."
+      );
+
       return;
     }
 
+    stopAllAudio();
+
+    setIsGeneratingSound(true);
+
+    setGeneratedAudioUrl("");
+
+    setGeneratedSoundError("");
+
+    setGeneratedSoundStatus(
+      "⏳ BOMBA AI is connecting to the sound engine..."
+    );
+
     try {
-      stopSound();
-
-      setIsGeneratingSound(true);
-      setGeneratedAudioUrl("");
-
-      setGeneratedSoundStatus(
-        "BOMBA AI is creating your sound..."
+      console.log(
+        "BOMBA AI SOUND REQUEST STARTED"
       );
 
       const response = await fetch(
         "/api/sound/generate",
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
             type: "Background Music",
-            prompt: soundPrompt.trim(),
-            duration: Number(soundDuration),
+            prompt: cleanPrompt,
+            duration:
+              Number(soundDuration),
           }),
         }
       );
 
-      const data = await response.json();
+      console.log(
+        "BOMBA AI SOUND HTTP STATUS:",
+        response.status
+      );
+
+      const text =
+        await response.text();
+
+      console.log(
+        "BOMBA AI SOUND RAW RESPONSE:",
+        text
+      );
+
+      let data = {};
+
+      try {
+        data =
+          text
+            ? JSON.parse(text)
+            : {};
+      } catch (error) {
+        throw new Error(
+          "Sound server returned an invalid response."
+        );
+      }
 
       console.log(
         "BOMBA AI SOUND RESPONSE:",
@@ -424,12 +497,14 @@ export default function StudioBoard() {
       if (!response.ok) {
         throw new Error(
           data?.error ||
-            "Sound generation failed."
+            data?.message ||
+            `Sound generation failed with HTTP ${response.status}.`
         );
       }
 
       if (
-        data?.status === "completed" &&
+        data?.status ===
+          "completed" &&
         data?.audioUrl
       ) {
         setGeneratedAudioUrl(
@@ -437,25 +512,33 @@ export default function StudioBoard() {
         );
 
         setGeneratedSoundStatus(
-          "🎵 AI sound created successfully."
+          "✅ AI sound created successfully. Press PLAY AI SOUND."
         );
 
         return;
       }
 
       if (
-        data?.status === "processing"
+        data?.status ===
+        "processing"
       ) {
         setGeneratedSoundStatus(
-          "⏳ Sound is still processing. Try again shortly."
+          "⏳ Sound is still processing. Generate again shortly."
         );
+
+        if (data?.predictionId) {
+          console.log(
+            "BOMBA SOUND PREDICTION:",
+            data.predictionId
+          );
+        }
 
         return;
       }
 
       throw new Error(
         data?.error ||
-          "No audio URL was returned."
+          "The sound engine did not return an audio file."
       );
     } catch (error) {
       console.error(
@@ -463,9 +546,16 @@ export default function StudioBoard() {
         error
       );
 
-      setGeneratedSoundStatus(
+      const message =
         error?.message ||
-          "Unable to generate AI sound."
+        "Unable to generate AI sound.";
+
+      setGeneratedSoundError(
+        message
+      );
+
+      setGeneratedSoundStatus(
+        `❌ ${message}`
       );
     } finally {
       setIsGeneratingSound(false);
@@ -479,66 +569,79 @@ export default function StudioBoard() {
   function playGeneratedSound() {
     if (!generatedAudioUrl) {
       setGeneratedSoundStatus(
-        "Generate a sound first."
+        "⚠️ Generate a sound first."
       );
+
       return;
     }
 
+    stopLibrarySound();
+
+    stopGeneratedSound();
+
     try {
-      if (generatedAudioRef.current) {
-        generatedAudioRef.current.pause();
-        generatedAudioRef.current = null;
+      setGeneratedSoundStatus(
+        "⏳ Loading generated AI sound..."
+      );
+
+      const audio =
+        new Audio(
+          generatedAudioUrl
+        );
+
+      audio.preload =
+        "auto";
+
+      audio.volume =
+        Number(volume) / 100;
+
+      generatedAudioRef.current =
+        audio;
+
+      audio.onloadeddata = () => {
+        console.log(
+          "BOMBA GENERATED AUDIO LOADED"
+        );
+      };
+
+      audio.onended = () => {
+        setGeneratedSoundStatus(
+          "🎵 AI sound finished. Ready again."
+        );
+      };
+
+      audio.onerror = () => {
+        console.error(
+          "BOMBA GENERATED AUDIO ERROR:",
+          audio.error
+        );
+
+        setGeneratedSoundStatus(
+          "❌ Generated audio could not be played."
+        );
+      };
+
+      const promise =
+        audio.play();
+
+      if (promise) {
+        promise
+          .then(() => {
+            setGeneratedSoundStatus(
+              "▶️ AI sound is playing."
+            );
+          })
+          .catch((error) => {
+            console.error(
+              "BOMBA GENERATED AUDIO PLAY ERROR:",
+              error
+            );
+
+            setGeneratedSoundStatus(
+              "❌ Browser blocked the generated audio."
+            );
+          });
       }
-
-      const audio = new Audio(
-        generatedAudioUrl
-      );
-
-      audio.preload = "auto";
-      audio.volume = volume / 100;
-
-      generatedAudioRef.current = audio;
-
-      audio.addEventListener(
-        "ended",
-        () => {
-          setGeneratedSoundStatus(
-            "AI sound finished. Ready again."
-          );
-        }
-      );
-
-      audio.addEventListener(
-        "error",
-        () => {
-          console.error(
-            "BOMBA GENERATED AUDIO ERROR:",
-            audio.error
-          );
-
-          setGeneratedSoundStatus(
-            "The generated audio could not be played."
-          );
-        }
-      );
-
-      audio
-        .play()
-        .then(() => {
-          setGeneratedSoundStatus(
-            "▶️ AI sound is playing."
-          );
-        })
-        .catch((error) => {
-          console.error(
-            "BOMBA GENERATED AUDIO PLAY ERROR:",
-            error
-          );
-
-          setGeneratedSoundStatus(
-            "The generated audio could not be played."
-          );
-        });
     } catch (error) {
       console.error(
         "BOMBA GENERATED AUDIO ERROR:",
@@ -546,14 +649,14 @@ export default function StudioBoard() {
       );
 
       setGeneratedSoundStatus(
-        "Unable to play generated audio."
+        "❌ Unable to play generated audio."
       );
     }
   }
 
-  /* =========================================================
+  /* =======================================================
      UI
-  ========================================================= */
+  ======================================================= */
 
   return (
     <section
@@ -569,7 +672,11 @@ export default function StudioBoard() {
     >
       {/* HEADER */}
 
-      <div style={{ marginBottom: "12px" }}>
+      <div
+        style={{
+          marginBottom: "12px",
+        }}
+      >
         <div
           style={{
             fontSize: "11px",
@@ -583,7 +690,8 @@ export default function StudioBoard() {
 
         <h2
           style={{
-            margin: "4px 0 3px",
+            margin:
+              "4px 0 3px",
             fontSize: "18px",
             fontWeight: "800",
           }}
@@ -612,83 +720,120 @@ export default function StudioBoard() {
           gap: "8px",
         }}
       >
-        {modules.map((module) => (
-          <button
-            key={module.number}
-            type="button"
-            onClick={() =>
-              setActiveModule(module.name)
-            }
-            style={{
-              width: "100%",
-              minHeight: "58px",
-              padding: "9px",
-              borderRadius: "10px",
-              border:
-                activeModule === module.name
-                  ? "1px solid rgba(255,212,59,0.65)"
-                  : "1px solid rgba(255,255,255,0.10)",
-              background:
-                activeModule === module.name
-                  ? "rgba(255,212,59,0.08)"
-                  : "rgba(255,255,255,0.035)",
-              color: "inherit",
-              textAlign: "left",
-              cursor: "pointer",
-            }}
-          >
-            <div
+        {modules.map(
+          (module) => (
+            <button
+              key={
+                module.number
+              }
+              type="button"
+              onClick={() =>
+                setActiveModule(
+                  module.name
+                )
+              }
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
+                width: "100%",
+                minHeight:
+                  "58px",
+                padding: "9px",
+                borderRadius:
+                  "10px",
+                border:
+                  activeModule ===
+                  module.name
+                    ? "1px solid rgba(255,212,59,0.65)"
+                    : "1px solid rgba(255,255,255,0.10)",
+                background:
+                  activeModule ===
+                  module.name
+                    ? "rgba(255,212,59,0.08)"
+                    : "rgba(255,255,255,0.035)",
+                color:
+                  "inherit",
+                textAlign:
+                  "left",
+                cursor:
+                  "pointer",
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: "18px",
-                  lineHeight: 1,
+                  display:
+                    "flex",
+                  alignItems:
+                    "center",
+                  gap: "8px",
                 }}
               >
-                {module.icon}
-              </span>
-
-              <span style={{ minWidth: 0 }}>
                 <span
                   style={{
-                    display: "block",
-                    fontSize: "9px",
-                    opacity: 0.45,
-                    marginBottom: "2px",
+                    fontSize:
+                      "18px",
+                    lineHeight: 1,
                   }}
                 >
-                  {module.number}
+                  {
+                    module.icon
+                  }
                 </span>
 
                 <span
                   style={{
-                    display: "block",
-                    fontSize: "11px",
-                    fontWeight: "800",
-                    letterSpacing: "0.5px",
+                    minWidth: 0,
                   }}
                 >
-                  {module.name}
+                  <span
+                    style={{
+                      display:
+                        "block",
+                      fontSize:
+                        "9px",
+                      opacity:
+                        0.45,
+                      marginBottom:
+                        "2px",
+                    }}
+                  >
+                    {
+                      module.number
+                    }
+                  </span>
+
+                  <span
+                    style={{
+                      display:
+                        "block",
+                      fontSize:
+                        "11px",
+                      fontWeight:
+                        "800",
+                      letterSpacing:
+                        "0.5px",
+                    }}
+                  >
+                    {
+                      module.name
+                    }
+                  </span>
                 </span>
-              </span>
-            </div>
-          </button>
-        ))}
+              </div>
+            </button>
+          )
+        )}
       </div>
 
       {/* SOUND STUDIO */}
 
-      {activeModule === "SOUND" && (
+      {activeModule ===
+        "SOUND" && (
         <div
           style={{
-            marginTop: "14px",
+            marginTop:
+              "14px",
             padding: "14px",
-            borderRadius: "12px",
+            borderRadius:
+              "12px",
             border:
               "1px solid rgba(255,212,59,0.20)",
             background:
@@ -699,20 +844,28 @@ export default function StudioBoard() {
 
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
               gap: "10px",
-              marginBottom: "12px",
+              marginBottom:
+                "12px",
             }}
           >
             <div>
               <div
                 style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "700",
+                  letterSpacing:
+                    "1px",
+                  opacity:
+                    0.55,
                 }}
               >
                 SOUND STUDIO
@@ -720,9 +873,12 @@ export default function StudioBoard() {
 
               <h3
                 style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
+                  margin:
+                    "4px 0 0",
+                  fontSize:
+                    "16px",
+                  fontWeight:
+                    "800",
                 }}
               >
                 🔊 Professional Sound
@@ -732,33 +888,40 @@ export default function StudioBoard() {
             <button
               type="button"
               onClick={() => {
-                stopSound();
-                setActiveModule(null);
+                stopAllAudio();
+                setActiveModule(
+                  null
+                );
               }}
               style={{
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
+                color:
+                  "inherit",
+                borderRadius:
+                  "8px",
+                padding:
+                  "6px 9px",
+                fontSize:
+                  "11px",
+                cursor:
+                  "pointer",
               }}
             >
               CLOSE
             </button>
           </div>
 
-          {/* =================================================
-              AI SOUND GENERATOR
-          ================================================= */}
+          {/* AI SOUND GENERATOR */}
 
           <div
             style={{
-              padding: "12px",
-              borderRadius: "10px",
+              padding:
+                "12px",
+              borderRadius:
+                "10px",
               border:
                 "1px solid rgba(255,212,59,0.30)",
               background:
@@ -767,10 +930,14 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                letterSpacing:
+                  "1px",
+                marginBottom:
+                  "5px",
               }}
             >
               ✨ BOMBA AI SOUND GENERATOR
@@ -778,108 +945,173 @@ export default function StudioBoard() {
 
             <div
               style={{
-                fontSize: "9px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "10px",
+                fontSize:
+                  "9px",
+                opacity:
+                  0.55,
+                lineHeight:
+                  1.5,
+                marginBottom:
+                  "10px",
               }}
             >
-              Create original AI background music
-              from your own description.
+              Create original AI background music from your own description.
             </div>
 
             <textarea
-              value={soundPrompt}
-              onChange={(event) =>
+              value={
+                soundPrompt
+              }
+              onChange={(
+                event
+              ) =>
                 setSoundPrompt(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               rows={4}
               placeholder="Describe the music you want..."
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                resize:
+                  "vertical",
+                padding:
+                  "10px",
+                borderRadius:
+                  "8px",
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
+                color:
+                  "inherit",
+                fontSize:
+                  "11px",
+                lineHeight:
+                  1.5,
+                outline:
+                  "none",
               }}
             />
 
             <div
               style={{
-                display: "flex",
+                display:
+                  "flex",
                 gap: "8px",
-                marginTop: "9px",
+                marginTop:
+                  "9px",
               }}
             >
               <select
-                value={soundDuration}
-                onChange={(event) =>
+                value={
+                  soundDuration
+                }
+                onChange={(
+                  event
+                ) =>
                   setSoundDuration(
-                    Number(event.target.value)
+                    Number(
+                      event.target
+                        .value
+                    )
                   )
                 }
                 style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
+                  flex:
+                    1,
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   border:
                     "1px solid rgba(255,255,255,0.12)",
                   background:
                     "rgba(0,0,0,0.35)",
-                  color: "inherit",
-                  fontSize: "10px",
+                  color:
+                    "inherit",
+                  fontSize:
+                    "10px",
                 }}
               >
-                <option value={5}>
+                <option
+                  value={
+                    5
+                  }
+                >
                   5 seconds
                 </option>
 
-                <option value={8}>
+                <option
+                  value={
+                    8
+                  }
+                >
                   8 seconds
                 </option>
 
-                <option value={10}>
+                <option
+                  value={
+                    10
+                  }
+                >
                   10 seconds
                 </option>
 
-                <option value={15}>
+                <option
+                  value={
+                    15
+                  }
+                >
                   15 seconds
                 </option>
 
-                <option value={20}>
+                <option
+                  value={
+                    20
+                  }
+                >
                   20 seconds
                 </option>
 
-                <option value={30}>
+                <option
+                  value={
+                    30
+                  }
+                >
                   30 seconds
                 </option>
               </select>
 
               <button
                 type="button"
-                onClick={generateAISound}
-                disabled={isGeneratingSound}
+                onClick={
+                  generateAISound
+                }
+                disabled={
+                  isGeneratingSound
+                }
                 style={{
-                  flex: 2,
-                  padding: "10px",
-                  borderRadius: "8px",
+                  flex:
+                    2,
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   border:
                     "1px solid rgba(255,212,59,0.45)",
                   background:
                     "rgba(255,212,59,0.15)",
-                  color: "inherit",
-                  fontSize: "10px",
-                  fontWeight: "800",
+                  color:
+                    "inherit",
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "800",
                   cursor:
                     isGeneratingSound
                       ? "wait"
@@ -896,26 +1128,71 @@ export default function StudioBoard() {
               </button>
             </div>
 
-            {generatedSoundStatus && (
+            {/* AI STATUS */}
+
+            <div
+              style={{
+                marginTop:
+                  "10px",
+                padding:
+                  "9px",
+                borderRadius:
+                  "8px",
+                background:
+                  "rgba(0,0,0,0.20)",
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.5,
+                textAlign:
+                  "center",
+              }}
+            >
+              {
+                generatedSoundStatus
+              }
+            </div>
+
+            {/* AI ERROR */}
+
+            {generatedSoundError && (
               <div
                 style={{
-                  marginTop: "9px",
-                  textAlign: "center",
-                  fontSize: "9px",
-                  lineHeight: 1.5,
-                  opacity: 0.75,
+                  marginTop:
+                    "7px",
+                  padding:
+                    "8px",
+                  borderRadius:
+                    "7px",
+                  background:
+                    "rgba(255,70,70,0.08)",
+                  border:
+                    "1px solid rgba(255,70,70,0.20)",
+                  fontSize:
+                    "8px",
+                  lineHeight:
+                    1.5,
+                  wordBreak:
+                    "break-word",
                 }}
               >
-                {generatedSoundStatus}
+                {
+                  generatedSoundError
+                }
               </div>
             )}
+
+            {/* GENERATED AUDIO */}
 
             {generatedAudioUrl && (
               <div
                 style={{
-                  marginTop: "10px",
-                  padding: "9px",
-                  borderRadius: "8px",
+                  marginTop:
+                    "10px",
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   background:
                     "rgba(0,0,0,0.25)",
                   border:
@@ -924,9 +1201,12 @@ export default function StudioBoard() {
               >
                 <div
                   style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "7px",
+                    fontSize:
+                      "9px",
+                    fontWeight:
+                      "800",
+                    marginBottom:
+                      "7px",
                   }}
                 >
                   ✅ AI SOUND READY
@@ -935,29 +1215,63 @@ export default function StudioBoard() {
                 <audio
                   controls
                   preload="metadata"
-                  src={generatedAudioUrl}
+                  src={
+                    generatedAudioUrl
+                  }
+                  onPlay={() =>
+                    setGeneratedSoundStatus(
+                      "▶️ AI sound is playing."
+                    )
+                  }
+                  onPause={() =>
+                    setGeneratedSoundStatus(
+                      "⏸️ AI sound paused."
+                    )
+                  }
+                  onEnded={() =>
+                    setGeneratedSoundStatus(
+                      "🎵 AI sound finished."
+                    )
+                  }
+                  onError={() =>
+                    setGeneratedSoundStatus(
+                      "❌ Browser could not load the generated audio."
+                    )
+                  }
                   style={{
-                    width: "100%",
-                    height: "38px",
+                    width:
+                      "100%",
+                    height:
+                      "40px",
                   }}
                 />
 
                 <button
                   type="button"
-                  onClick={playGeneratedSound}
+                  onClick={
+                    playGeneratedSound
+                  }
                   style={{
-                    width: "100%",
-                    marginTop: "8px",
-                    padding: "9px",
-                    borderRadius: "8px",
+                    width:
+                      "100%",
+                    marginTop:
+                      "8px",
+                    padding:
+                      "10px",
+                    borderRadius:
+                      "8px",
                     border:
                       "1px solid rgba(255,212,59,0.35)",
                     background:
                       "rgba(255,212,59,0.08)",
-                    color: "inherit",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    cursor: "pointer",
+                    color:
+                      "inherit",
+                    fontSize:
+                      "10px",
+                    fontWeight:
+                      "800",
+                    cursor:
+                      "pointer",
                   }}
                 >
                   ▶️ PLAY AI SOUND
@@ -970,11 +1284,14 @@ export default function StudioBoard() {
 
           <div
             style={{
-              marginTop: "12px",
-              display: "grid",
+              marginTop:
+                "12px",
+              display:
+                "grid",
               gridTemplateColumns:
                 "repeat(2, minmax(0, 1fr))",
-              gap: "8px",
+              gap:
+                "8px",
             }}
           >
             {soundCategories.map(
@@ -984,68 +1301,97 @@ export default function StudioBoard() {
                 description,
               }) => (
                 <button
-                  key={title}
+                  key={
+                    title
+                  }
                   type="button"
                   onClick={() =>
-                    selectCategory(title)
+                    selectCategory(
+                      title
+                    )
                   }
                   style={{
-                    padding: "11px",
-                    minHeight: "82px",
-                    borderRadius: "10px",
+                    padding:
+                      "11px",
+                    minHeight:
+                      "82px",
+                    borderRadius:
+                      "10px",
                     border:
-                      soundCategory === title
+                      soundCategory ===
+                      title
                         ? "1px solid rgba(255,212,59,0.65)"
                         : "1px solid rgba(255,255,255,0.10)",
                     background:
-                      soundCategory === title
+                      soundCategory ===
+                      title
                         ? "rgba(255,212,59,0.10)"
                         : "rgba(255,255,255,0.035)",
-                    color: "inherit",
-                    textAlign: "left",
-                    cursor: "pointer",
+                    color:
+                      "inherit",
+                    textAlign:
+                      "left",
+                    cursor:
+                      "pointer",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: "18px",
-                      marginBottom: "5px",
+                      fontSize:
+                        "18px",
+                      marginBottom:
+                        "5px",
                     }}
                   >
-                    {icon}
+                    {
+                      icon
+                    }
                   </div>
 
                   <div
                     style={{
-                      fontSize: "11px",
-                      fontWeight: "800",
-                      marginBottom: "3px",
+                      fontSize:
+                        "11px",
+                      fontWeight:
+                        "800",
+                      marginBottom:
+                        "3px",
                     }}
                   >
-                    {title}
+                    {
+                      title
+                    }
                   </div>
 
                   <div
                     style={{
-                      fontSize: "9px",
-                      lineHeight: 1.4,
-                      opacity: 0.55,
+                      fontSize:
+                        "9px",
+                      lineHeight:
+                        1.4,
+                      opacity:
+                        0.55,
                     }}
                   >
-                    {description}
+                    {
+                      description
+                    }
                   </div>
                 </button>
               )
             )}
           </div>
 
-          {/* SOUND LIST */}
+          {/* SOUND LIBRARY */}
 
           <div
             style={{
-              marginTop: "12px",
-              padding: "10px",
-              borderRadius: "9px",
+              marginTop:
+                "12px",
+              padding:
+                "10px",
+              borderRadius:
+                "9px",
               background:
                 "rgba(255,255,255,0.035)",
               border:
@@ -1054,83 +1400,176 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                letterSpacing: "1px",
-                marginBottom: "9px",
-                opacity: 0.65,
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "700",
+                letterSpacing:
+                  "1px",
+                marginBottom:
+                  "9px",
+                opacity:
+                  0.65,
               }}
             >
-              {soundCategory.toUpperCase()}
+              {
+                soundCategory.toUpperCase()
+              }
             </div>
 
-            {currentSounds.map((sound) => (
-              <button
-                key={sound.id}
-                type="button"
-                onClick={() =>
-                  selectSound(sound)
-                }
-                style={{
-                  width: "100%",
-                  marginBottom: "7px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border:
-                    selectedSound?.id === sound.id
-                      ? "1px solid rgba(255,212,59,0.65)"
-                      : "1px solid rgba(255,255,255,0.08)",
-                  background:
-                    selectedSound?.id === sound.id
-                      ? "rgba(255,212,59,0.08)"
-                      : "rgba(255,255,255,0.025)",
-                  color: "inherit",
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
-              >
+            {currentSounds.map(
+              (sound) => (
                 <div
+                  key={
+                    sound.id
+                  }
                   style={{
-                    fontSize: "11px",
-                    fontWeight: "800",
+                    marginBottom:
+                      "8px",
                   }}
                 >
-                  {sound.title}
-                </div>
-
-                <div
-                  style={{
-                    marginTop: "3px",
-                    fontSize: "9px",
-                    opacity: 0.55,
-                  }}
-                >
-                  {sound.description}
-                </div>
-
-                {sound.creator && (
-                  <div
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectSound(
+                        sound
+                      )
+                    }
                     style={{
-                      marginTop: "5px",
-                      fontSize: "8px",
-                      opacity: 0.4,
+                      width:
+                        "100%",
+                      padding:
+                        "10px",
+                      borderRadius:
+                        "8px",
+                      border:
+                        selectedSound?.id ===
+                        sound.id
+                          ? "1px solid rgba(255,212,59,0.65)"
+                          : "1px solid rgba(255,255,255,0.08)",
+                      background:
+                        selectedSound?.id ===
+                        sound.id
+                          ? "rgba(255,212,59,0.08)"
+                          : "rgba(255,255,255,0.025)",
+                      color:
+                        "inherit",
+                      textAlign:
+                        "left",
+                      cursor:
+                        "pointer",
                     }}
                   >
-                    Music by {sound.creator} ·{" "}
-                    {sound.source}
-                  </div>
-                )}
-              </button>
-            ))}
+                    <div
+                      style={{
+                        fontSize:
+                          "11px",
+                        fontWeight:
+                          "800",
+                      }}
+                    >
+                      {
+                        sound.title
+                      }
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop:
+                          "3px",
+                        fontSize:
+                          "9px",
+                        opacity:
+                          0.55,
+                      }}
+                    >
+                      {
+                        sound.description
+                      }
+                    </div>
+
+                    {sound.creator && (
+                      <div
+                        style={{
+                          marginTop:
+                            "5px",
+                          fontSize:
+                            "8px",
+                          opacity:
+                            0.4,
+                        }}
+                      >
+                        Music by{" "}
+                        {
+                          sound.creator
+                        }{" "}
+                        ·{" "}
+                        {
+                          sound.source
+                        }
+                      </div>
+                    )}
+                  </button>
+
+                  {selectedSound?.id ===
+                    sound.id && (
+                    <button
+                      type="button"
+                      onClick={
+                        previewSound
+                      }
+                      disabled={
+                        isLoading
+                      }
+                      style={{
+                        width:
+                          "100%",
+                        marginTop:
+                          "5px",
+                        padding:
+                          "8px",
+                        borderRadius:
+                          "7px",
+                        border:
+                          "1px solid rgba(255,212,59,0.30)",
+                        background:
+                          isPlaying
+                            ? "rgba(255,80,80,0.10)"
+                            : "rgba(255,212,59,0.08)",
+                        color:
+                          "inherit",
+                        fontSize:
+                          "9px",
+                        fontWeight:
+                          "800",
+                        cursor:
+                          isLoading
+                            ? "wait"
+                            : "pointer",
+                      }}
+                    >
+                      {isLoading
+                        ? "⏳ LOADING..."
+                        : isPlaying
+                        ? "⏹️ STOP SOUND"
+                        : "▶️ PREVIEW THIS SOUND"}
+                    </button>
+                  )}
+                </div>
+              )
+            )}
           </div>
 
           {/* VOLUME */}
 
           <div
             style={{
-              marginTop: "12px",
-              padding: "10px",
-              borderRadius: "9px",
+              marginTop:
+                "12px",
+              padding:
+                "10px",
+              borderRadius:
+                "9px",
               background:
                 "rgba(255,255,255,0.035)",
               border:
@@ -1139,16 +1578,22 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "7px",
+                display:
+                  "flex",
+                justifyContent:
+                  "space-between",
+                alignItems:
+                  "center",
+                marginBottom:
+                  "7px",
               }}
             >
               <span
                 style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "700",
                 }}
               >
                 🔊 VOLUME
@@ -1156,11 +1601,15 @@ export default function StudioBoard() {
 
               <span
                 style={{
-                  fontSize: "10px",
-                  opacity: 0.6,
+                  fontSize:
+                    "10px",
+                  opacity:
+                    0.6,
                 }}
               >
-                {volume}%
+                {
+                  volume
+                }%
               </span>
             </div>
 
@@ -1168,43 +1617,65 @@ export default function StudioBoard() {
               type="range"
               min="0"
               max="100"
-              value={volume}
-              onChange={(event) =>
-                updateVolume(event.target.value)
+              value={
+                volume
+              }
+              onChange={(
+                event
+              ) =>
+                updateVolume(
+                  event.target
+                    .value
+                )
               }
               style={{
-                width: "100%",
-                cursor: "pointer",
+                width:
+                  "100%",
+                cursor:
+                  "pointer",
               }}
             />
           </div>
 
-          {/* PREVIEW LIBRARY BUTTON */}
+          {/* MAIN LIBRARY PREVIEW */}
 
           <button
             type="button"
-            onClick={previewSound}
-            disabled={isLoading}
+            onClick={
+              previewSound
+            }
+            disabled={
+              isLoading
+            }
             style={{
-              width: "100%",
-              marginTop: "10px",
-              padding: "12px",
-              borderRadius: "9px",
+              width:
+                "100%",
+              marginTop:
+                "10px",
+              padding:
+                "12px",
+              borderRadius:
+                "9px",
               border:
                 "1px solid rgba(255,212,59,0.35)",
               background:
                 isPlaying
                   ? "rgba(255,80,80,0.10)"
                   : "rgba(255,212,59,0.10)",
-              color: "inherit",
-              fontSize: "11px",
-              fontWeight: "800",
+              color:
+                "inherit",
+              fontSize:
+                "11px",
+              fontWeight:
+                "800",
               cursor:
                 isLoading
                   ? "wait"
                   : "pointer",
               opacity:
-                isLoading ? 0.7 : 1,
+                isLoading
+                  ? 0.7
+                  : 1,
             }}
           >
             {isLoading
@@ -1214,33 +1685,44 @@ export default function StudioBoard() {
               : "▶️ PREVIEW SOUND"}
           </button>
 
-          {/* STATUS */}
+          {/* LIBRARY STATUS */}
 
           <div
             style={{
-              marginTop: "9px",
-              textAlign: "center",
-              fontSize: "9px",
-              lineHeight: 1.5,
-              opacity: 0.65,
+              marginTop:
+                "9px",
+              textAlign:
+                "center",
+              fontSize:
+                "9px",
+              lineHeight:
+                1.5,
+              opacity:
+                0.65,
             }}
           >
-            {soundStatus}
+            {
+              soundStatus
+            }
           </div>
 
           {/* FOOTER */}
 
           <div
             style={{
-              marginTop: "9px",
-              textAlign: "center",
-              fontSize: "8px",
-              lineHeight: 1.5,
-              opacity: 0.38,
+              marginTop:
+                "9px",
+              textAlign:
+                "center",
+              fontSize:
+                "8px",
+              lineHeight:
+                1.5,
+              opacity:
+                0.38,
             }}
           >
-            BOMBA Sound Studio — AI generated
-            sound and licensed assets.
+            BOMBA Sound Studio — AI generated sound and licensed assets.
           </div>
         </div>
       )}
