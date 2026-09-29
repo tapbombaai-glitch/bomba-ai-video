@@ -140,6 +140,29 @@ export default function StudioBoard() {
     "Choose a professional sound to preview."
   );
 
+  /* =======================================================
+     AI SOUND STATE
+  ======================================================= */
+
+  const [soundPrompt, setSoundPrompt] =
+    useState(
+      "cinematic emotional background music for a realistic movie scene"
+    );
+
+  const [soundDuration, setSoundDuration] =
+    useState(5);
+
+  const [generatedAudioUrl, setGeneratedAudioUrl] =
+    useState("");
+
+  const [isGeneratingSound, setIsGeneratingSound] =
+    useState(false);
+
+  const [generatedSoundStatus, setGeneratedSoundStatus] =
+    useState("");
+
+  const generatedAudioRef = useRef(null);
+
   const audioRef = useRef(null);
 
   const currentSounds =
@@ -157,11 +180,16 @@ export default function StudioBoard() {
         audioRef.current.load();
         audioRef.current = null;
       }
+
+      if (generatedAudioRef.current) {
+        generatedAudioRef.current.pause();
+        generatedAudioRef.current = null;
+      }
     };
   }, []);
 
   /* =======================================================
-     STOP SOUND
+     STOP LIBRARY SOUND
   ======================================================= */
 
   function stopSound() {
@@ -214,7 +242,7 @@ export default function StudioBoard() {
   }
 
   /* =======================================================
-     PREVIEW SOUND
+     PREVIEW LIBRARY SOUND
   ======================================================= */
 
   function previewSound() {
@@ -341,6 +369,185 @@ export default function StudioBoard() {
     if (audioRef.current) {
       audioRef.current.volume =
         nextVolume / 100;
+    }
+
+    if (generatedAudioRef.current) {
+      generatedAudioRef.current.volume =
+        nextVolume / 100;
+    }
+  }
+
+  /* =======================================================
+     GENERATE REAL AI SOUND
+  ======================================================= */
+
+  async function generateAISound() {
+    if (!soundPrompt.trim()) {
+      setGeneratedSoundStatus(
+        "Enter a sound description first."
+      );
+      return;
+    }
+
+    try {
+      stopSound();
+
+      setIsGeneratingSound(true);
+      setGeneratedAudioUrl("");
+
+      setGeneratedSoundStatus(
+        "BOMBA AI is creating your sound..."
+      );
+
+      const response = await fetch(
+        "/api/sound/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "Background Music",
+            prompt: soundPrompt.trim(),
+            duration: Number(soundDuration),
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "BOMBA AI SOUND RESPONSE:",
+        data
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Sound generation failed."
+        );
+      }
+
+      if (
+        data?.status === "completed" &&
+        data?.audioUrl
+      ) {
+        setGeneratedAudioUrl(
+          data.audioUrl
+        );
+
+        setGeneratedSoundStatus(
+          "🎵 AI sound created successfully."
+        );
+
+        return;
+      }
+
+      if (
+        data?.status === "processing"
+      ) {
+        setGeneratedSoundStatus(
+          "⏳ Sound is still processing. Try again shortly."
+        );
+
+        return;
+      }
+
+      throw new Error(
+        data?.error ||
+          "No audio URL was returned."
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA AI SOUND GENERATION ERROR:",
+        error
+      );
+
+      setGeneratedSoundStatus(
+        error?.message ||
+          "Unable to generate AI sound."
+      );
+    } finally {
+      setIsGeneratingSound(false);
+    }
+  }
+
+  /* =======================================================
+     PLAY GENERATED AI SOUND
+  ======================================================= */
+
+  function playGeneratedSound() {
+    if (!generatedAudioUrl) {
+      setGeneratedSoundStatus(
+        "Generate a sound first."
+      );
+      return;
+    }
+
+    try {
+      if (generatedAudioRef.current) {
+        generatedAudioRef.current.pause();
+        generatedAudioRef.current = null;
+      }
+
+      const audio = new Audio(
+        generatedAudioUrl
+      );
+
+      audio.preload = "auto";
+      audio.volume = volume / 100;
+
+      generatedAudioRef.current = audio;
+
+      audio.addEventListener(
+        "ended",
+        () => {
+          setGeneratedSoundStatus(
+            "AI sound finished. Ready again."
+          );
+        }
+      );
+
+      audio.addEventListener(
+        "error",
+        () => {
+          console.error(
+            "BOMBA GENERATED AUDIO ERROR:",
+            audio.error
+          );
+
+          setGeneratedSoundStatus(
+            "The generated audio could not be played."
+          );
+        }
+      );
+
+      audio
+        .play()
+        .then(() => {
+          setGeneratedSoundStatus(
+            "▶️ AI sound is playing."
+          );
+        })
+        .catch((error) => {
+          console.error(
+            "BOMBA GENERATED AUDIO PLAY ERROR:",
+            error
+          );
+
+          setGeneratedSoundStatus(
+            "The generated audio could not be played."
+          );
+        });
+    } catch (error) {
+      console.error(
+        "BOMBA GENERATED AUDIO ERROR:",
+        error
+      );
+
+      setGeneratedSoundStatus(
+        "Unable to play generated audio."
+      );
     }
   }
 
@@ -544,10 +751,226 @@ export default function StudioBoard() {
             </button>
           </div>
 
+          {/* =================================================
+              AI SOUND GENERATOR
+          ================================================= */}
+
+          <div
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              border:
+                "1px solid rgba(255,212,59,0.30)",
+              background:
+                "rgba(255,212,59,0.07)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "800",
+                letterSpacing: "1px",
+                marginBottom: "5px",
+              }}
+            >
+              ✨ BOMBA AI SOUND GENERATOR
+            </div>
+
+            <div
+              style={{
+                fontSize: "9px",
+                opacity: 0.55,
+                lineHeight: 1.5,
+                marginBottom: "10px",
+              }}
+            >
+              Create original AI background music
+              from your own description.
+            </div>
+
+            <textarea
+              value={soundPrompt}
+              onChange={(event) =>
+                setSoundPrompt(
+                  event.target.value
+                )
+              }
+              rows={4}
+              placeholder="Describe the music you want..."
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                resize: "vertical",
+                padding: "10px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(0,0,0,0.25)",
+                color: "inherit",
+                fontSize: "11px",
+                lineHeight: 1.5,
+                outline: "none",
+              }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                marginTop: "9px",
+              }}
+            >
+              <select
+                value={soundDuration}
+                onChange={(event) =>
+                  setSoundDuration(
+                    Number(event.target.value)
+                  )
+                }
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border:
+                    "1px solid rgba(255,255,255,0.12)",
+                  background:
+                    "rgba(0,0,0,0.35)",
+                  color: "inherit",
+                  fontSize: "10px",
+                }}
+              >
+                <option value={5}>
+                  5 seconds
+                </option>
+
+                <option value={8}>
+                  8 seconds
+                </option>
+
+                <option value={10}>
+                  10 seconds
+                </option>
+
+                <option value={15}>
+                  15 seconds
+                </option>
+
+                <option value={20}>
+                  20 seconds
+                </option>
+
+                <option value={30}>
+                  30 seconds
+                </option>
+              </select>
+
+              <button
+                type="button"
+                onClick={generateAISound}
+                disabled={isGeneratingSound}
+                style={{
+                  flex: 2,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border:
+                    "1px solid rgba(255,212,59,0.45)",
+                  background:
+                    "rgba(255,212,59,0.15)",
+                  color: "inherit",
+                  fontSize: "10px",
+                  fontWeight: "800",
+                  cursor:
+                    isGeneratingSound
+                      ? "wait"
+                      : "pointer",
+                  opacity:
+                    isGeneratingSound
+                      ? 0.65
+                      : 1,
+                }}
+              >
+                {isGeneratingSound
+                  ? "⏳ CREATING SOUND..."
+                  : "🎵 GENERATE AI SOUND"}
+              </button>
+            </div>
+
+            {generatedSoundStatus && (
+              <div
+                style={{
+                  marginTop: "9px",
+                  textAlign: "center",
+                  fontSize: "9px",
+                  lineHeight: 1.5,
+                  opacity: 0.75,
+                }}
+              >
+                {generatedSoundStatus}
+              </div>
+            )}
+
+            {generatedAudioUrl && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  padding: "9px",
+                  borderRadius: "8px",
+                  background:
+                    "rgba(0,0,0,0.25)",
+                  border:
+                    "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: "800",
+                    marginBottom: "7px",
+                  }}
+                >
+                  ✅ AI SOUND READY
+                </div>
+
+                <audio
+                  controls
+                  preload="metadata"
+                  src={generatedAudioUrl}
+                  style={{
+                    width: "100%",
+                    height: "38px",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={playGeneratedSound}
+                  style={{
+                    width: "100%",
+                    marginTop: "8px",
+                    padding: "9px",
+                    borderRadius: "8px",
+                    border:
+                      "1px solid rgba(255,212,59,0.35)",
+                    background:
+                      "rgba(255,212,59,0.08)",
+                    color: "inherit",
+                    fontSize: "10px",
+                    fontWeight: "800",
+                    cursor: "pointer",
+                  }}
+                >
+                  ▶️ PLAY AI SOUND
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* SOUND CATEGORIES */}
 
           <div
             style={{
+              marginTop: "12px",
               display: "grid",
               gridTemplateColumns:
                 "repeat(2, minmax(0, 1fr))",
@@ -756,7 +1179,7 @@ export default function StudioBoard() {
             />
           </div>
 
-          {/* PREVIEW BUTTON */}
+          {/* PREVIEW LIBRARY BUTTON */}
 
           <button
             type="button"
@@ -816,8 +1239,8 @@ export default function StudioBoard() {
               opacity: 0.38,
             }}
           >
-            BOMBA Sound Library — licensed assets
-            and BOMBA Originals only.
+            BOMBA Sound Studio — AI generated
+            sound and licensed assets.
           </div>
         </div>
       )}
