@@ -3,13 +3,21 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const ELEVENLABS_API_KEY =
-  process.env.ELEVENLABS_API_KEY;
+const CARTESIA_API_KEY =
+  process.env.CARTESIA_API_KEY;
 
-const ELEVENLABS_MUSIC_URL =
-  "https://api.elevenlabs.io/v1/music";
+const CARTESIA_URL =
+  "https://api.cartesia.ai/tts/bytes";
 
-function getSoundPrompt(type, prompt) {
+const CARTESIA_MODEL =
+  process.env.CARTESIA_MODEL || "sonic-3.6";
+
+// Default Cartesia voice.
+// This can be changed later from the Voice Studio.
+const DEFAULT_VOICE_ID =
+  "a0e99841-438c-4a64-b679-ae501e7d6091";
+
+function buildAudioText(type, prompt) {
   const cleanPrompt =
     typeof prompt === "string"
       ? prompt.trim()
@@ -21,27 +29,20 @@ function getSoundPrompt(type, prompt) {
       : "Background Music";
 
   if (!cleanPrompt) {
-    return `${soundType}, cinematic instrumental background music, clean professional production, no vocals`;
+    return `${soundType}.`;
   }
 
-  return `${cleanPrompt}
-
-Style: ${soundType}.
-Instrumental only.
-No vocals.
-No speech.
-Clean cinematic production.
-Suitable for a short AI video.`;
+  return `${cleanPrompt}.`;
 }
 
 export async function POST(request) {
   try {
-    if (!ELEVENLABS_API_KEY) {
+    if (!CARTESIA_API_KEY) {
       return NextResponse.json(
         {
           status: "failed",
           error:
-            "ELEVENLABS_API_KEY is not configured in Vercel.",
+            "CARTESIA_API_KEY is not configured in Vercel.",
         },
         { status: 500 }
       );
@@ -59,14 +60,6 @@ export async function POST(request) {
         ? body.prompt.trim()
         : "";
 
-    let duration =
-      Number(body?.duration) || 5;
-
-    duration = Math.max(
-      5,
-      Math.min(30, Math.round(duration))
-    );
-
     if (!prompt) {
       return NextResponse.json(
         {
@@ -78,40 +71,59 @@ export async function POST(request) {
       );
     }
 
-    const finalPrompt =
-      getSoundPrompt(type, prompt);
+    const voiceId =
+      typeof body?.voiceId === "string" &&
+      body.voiceId.trim()
+        ? body.voiceId.trim()
+        : DEFAULT_VOICE_ID;
+
+    const finalText =
+      buildAudioText(type, prompt);
 
     console.log(
-      "BOMBA ELEVENLABS MUSIC STARTING:",
+      "BOMBA CARTESIA SOUND STARTING:",
       {
-        duration,
         type,
+        model: CARTESIA_MODEL,
+        voiceId,
+        textLength: finalText.length,
       }
     );
 
     const response = await fetch(
-      `${ELEVENLABS_MUSIC_URL}?output_format=mp3_44100_128`,
+      CARTESIA_URL,
       {
         method: "POST",
         headers: {
-          "xi-api-key":
-            ELEVENLABS_API_KEY,
-          "Content-Type":
-            "application/json",
+          "X-API-Key": CARTESIA_API_KEY,
+          "Cartesia-Version": "2025-04-16",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: finalPrompt,
-          music_length_ms:
-            duration * 1000,
-          model_id: "music_v2",
-          force_instrumental: true,
+          model_id: CARTESIA_MODEL,
+
+          transcript: finalText,
+
+          voice: {
+            mode: "id",
+            id: voiceId,
+          },
+
+          language: "en",
+
+          output_format: {
+            container: "mp3",
+            encoding: "mp3",
+            sample_rate: 44100,
+          },
         }),
+
         cache: "no-store",
       }
     );
 
     console.log(
-      "BOMBA ELEVENLABS MUSIC STATUS:",
+      "BOMBA CARTESIA SOUND STATUS:",
       response.status
     );
 
@@ -120,7 +132,7 @@ export async function POST(request) {
         await response.text();
 
       console.error(
-        "BOMBA ELEVENLABS MUSIC ERROR:",
+        "BOMBA CARTESIA SOUND ERROR:",
         errorText
       );
 
@@ -129,7 +141,7 @@ export async function POST(request) {
           status: "failed",
           error:
             errorText ||
-            `ElevenLabs returned HTTP ${response.status}.`,
+            `Cartesia returned HTTP ${response.status}.`,
         },
         {
           status:
@@ -149,14 +161,14 @@ export async function POST(request) {
         {
           status: "failed",
           error:
-            "ElevenLabs returned an empty audio file.",
+            "Cartesia returned an empty audio file.",
         },
         { status: 502 }
       );
     }
 
     console.log(
-      "BOMBA ELEVENLABS MUSIC COMPLETED:",
+      "BOMBA CARTESIA SOUND COMPLETED:",
       audioBuffer.byteLength,
       "bytes"
     );
@@ -166,8 +178,7 @@ export async function POST(request) {
       {
         status: 200,
         headers: {
-          "Content-Type":
-            "audio/mpeg",
+          "Content-Type": "audio/mpeg",
           "Content-Length":
             String(audioBuffer.byteLength),
           "Cache-Control":
@@ -177,7 +188,7 @@ export async function POST(request) {
     );
   } catch (error) {
     console.error(
-      "BOMBA ELEVENLABS MUSIC SERVER ERROR:",
+      "BOMBA CARTESIA SOUND SERVER ERROR:",
       error
     );
 
