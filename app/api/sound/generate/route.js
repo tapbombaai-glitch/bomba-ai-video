@@ -10,10 +10,8 @@ const CARTESIA_URL =
   "https://api.cartesia.ai/tts/bytes";
 
 const CARTESIA_MODEL =
-  process.env.CARTESIA_MODEL || "sonic-3.6";
+  process.env.CARTESIA_MODEL || "sonic-3";
 
-// Default Cartesia voice.
-// This can be changed later from the Voice Studio.
 const DEFAULT_VOICE_ID =
   "a0e99841-438c-4a64-b679-ae501e7d6091";
 
@@ -173,16 +171,23 @@ export async function POST(request) {
       "bytes"
     );
 
-    return new Response(
-      audioBuffer,
+    // Convert the MP3 into a data URL because
+    // the existing Sound Studio expects JSON.
+    const base64Audio =
+      Buffer.from(audioBuffer).toString("base64");
+
+    const audioUrl =
+      `data:audio/mpeg;base64,${base64Audio}`;
+
+    return NextResponse.json(
+      {
+        status: "completed",
+        audioUrl,
+      },
       {
         status: 200,
         headers: {
-          "Content-Type": "audio/mpeg",
-          "Content-Length":
-            String(audioBuffer.byteLength),
-          "Cache-Control":
-            "no-store",
+          "Cache-Control": "no-store",
         },
       }
     );
