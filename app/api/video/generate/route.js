@@ -34,8 +34,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "ETERNALAI_API_KEY is not configured in Vercel.",
+          error: "ETERNALAI_API_KEY is not configured in Vercel.",
         },
         { status: 500 }
       );
@@ -63,8 +62,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "Please upload a character photo first.",
+          error: "Please upload a character photo first.",
         },
         { status: 400 }
       );
@@ -74,8 +72,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "Please describe the video you want.",
+          error: "Please describe the video you want.",
         },
         { status: 400 }
       );
@@ -96,34 +93,25 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       cfg_scale: 0.5,
     };
 
-    console.log(
-      "BOMBA ETERNAL AI STARTING:",
-      {
-        model: ETERNALAI_MODEL,
-        mode,
-        duration: "5 seconds",
-        resolution: "480p",
-        aspectRatio: "16:9",
-      }
-    );
+    console.log("BOMBA ETERNAL AI STARTING:", {
+      model: ETERNALAI_MODEL,
+      mode,
+      duration: "5 seconds",
+      resolution: "480p",
+      aspectRatio: "16:9",
+    });
 
-    const response = await fetch(
-      ETERNALAI_SUBMIT_URL,
-      {
-        method: "POST",
-        headers: {
-          Authorization:
-            `Bearer ${ETERNALAI_API_KEY}`,
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify(payload),
-        cache: "no-store",
-      }
-    );
+    const response = await fetch(ETERNALAI_SUBMIT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ETERNALAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
 
     const text = await response.text();
-
     const data = safeParse(text);
 
     console.log(
@@ -165,8 +153,7 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "Eternal AI did not return a request ID.",
+          error: "Eternal AI did not return a request ID.",
           raw: text.slice(0, 1000),
         },
         { status: 502 }
@@ -220,15 +207,13 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "ETERNALAI_API_KEY is missing.",
+          error: "ETERNALAI_API_KEY is missing.",
         },
         { status: 500 }
       );
     }
 
-    const { searchParams } =
-      new URL(request.url);
+    const { searchParams } = new URL(request.url);
 
     const requestId =
       searchParams.get("id") ||
@@ -240,12 +225,15 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            "Missing generation ID.",
+          error: "Missing generation ID.",
         },
         { status: 400 }
       );
     }
+
+    /* =====================================================
+       CORRECT STATUS URL
+    ===================================================== */
 
     const statusUrl =
       `${ETERNALAI_BASE_URL}/api/image-to-video/${encodeURIComponent(
@@ -257,24 +245,16 @@ export async function GET(request) {
       requestId
     );
 
-    const statusRes =
-      await fetch(
-        statusUrl,
-        {
-          method: "GET",
-          headers: {
-            Authorization:
-              `Bearer ${ETERNALAI_API_KEY}`,
-          },
-          cache: "no-store",
-        }
-      );
+    const statusRes = await fetch(statusUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${ETERNALAI_API_KEY}`,
+      },
+      cache: "no-store",
+    });
 
-    const statusText =
-      await statusRes.text();
-
-    const statusData =
-      safeParse(statusText);
+    const statusText = await statusRes.text();
+    const statusData = safeParse(statusText);
 
     console.log(
       "BOMBA ETERNAL AI STATUS HTTP:",
@@ -301,16 +281,13 @@ export async function GET(request) {
       );
     }
 
-    const result =
-      statusData?.result ||
-      {};
+    const result = statusData?.result || {};
 
-    const generationStatus =
-      String(
-        result?.status ||
+    const generationStatus = String(
+      result?.status ||
         statusData?.status ||
         ""
-      ).toLowerCase();
+    ).toLowerCase();
 
     const progress =
       result?.progress ??
@@ -387,11 +364,10 @@ export async function GET(request) {
 
     /* =====================================================
        COMPLETED
-       
+
        IMPORTANT:
        Do NOT download the MP4 through Vercel.
        Return the original Eternal AI video URL.
-       This avoids the 413 Payload Too Large problem.
     ===================================================== */
 
     if (
@@ -405,11 +381,7 @@ export async function GET(request) {
             status: "failed",
             error:
               "Generation completed but Eternal AI returned no video URL.",
-            raw:
-              statusText.slice(
-                0,
-                1000
-              ),
+            raw: statusText.slice(0, 1000),
             jobId: requestId,
           },
           { status: 502 }
