@@ -52,17 +52,49 @@ export default function StudioBoard() {
   const generatedAudioRef = useRef(null);
 
   /* =======================================================
+     VOICE STATE
+  ======================================================= */
+
+  const [voiceText, setVoiceText] = useState(
+    "Welcome to BOMBA AI Video Studio. Turn your idea into a realistic AI video."
+  );
+
+  const [voiceLanguage, setVoiceLanguage] =
+    useState("English");
+
+  const [voiceId, setVoiceId] = useState("");
+
+  const [generatedVoiceUrl, setGeneratedVoiceUrl] =
+    useState("");
+
+  const [isGeneratingVoice, setIsGeneratingVoice] =
+    useState(false);
+
+  const [generatedVoiceStatus, setGeneratedVoiceStatus] =
+    useState("Ready to create AI voice.");
+
+  const [generatedVoiceError, setGeneratedVoiceError] =
+    useState("");
+
+  const generatedVoiceRef = useRef(null);
+
+  /* =======================================================
      CLEANUP
   ======================================================= */
 
   useEffect(() => {
     return () => {
       stopGeneratedSound();
+      stopGeneratedVoice();
+
+      if (generatedVoiceUrl) {
+        URL.revokeObjectURL(generatedVoiceUrl);
+      }
     };
-  }, []);
+  }, [generatedVoiceUrl]);
 
   /* =======================================================
-     STOP GENERATED AUDIO
+     STOP GENERATED SOUND
   ======================================================= */
 
   function stopGeneratedSound() {
@@ -77,6 +109,25 @@ export default function StudioBoard() {
       }
 
       generatedAudioRef.current = null;
+    }
+  }
+
+  /* =======================================================
+     STOP GENERATED VOICE
+  ======================================================= */
+
+  function stopGeneratedVoice() {
+    if (generatedVoiceRef.current) {
+      try {
+        generatedVoiceRef.current.pause();
+        generatedVoiceRef.current.currentTime = 0;
+      } catch (error) {
+        console.log(
+          "Generated voice cleanup skipped."
+        );
+      }
+
+      generatedVoiceRef.current = null;
     }
   }
 
@@ -306,9 +357,253 @@ export default function StudioBoard() {
     }
   }
 
-  /* =========================================================
+  /* =======================================================
+     GENERATE CARTESIA AI VOICE
+  ======================================================= */
+
+  async function generateAIVoice() {
+    const cleanText = voiceText.trim();
+    const cleanVoiceId = voiceId.trim();
+
+    if (!cleanText) {
+      setGeneratedVoiceError(
+        "Enter the dialogue you want the AI voice to speak."
+      );
+
+      setGeneratedVoiceStatus(
+        "⚠️ Voice text is required."
+      );
+
+      return;
+    }
+
+    if (!cleanVoiceId) {
+      setGeneratedVoiceError(
+        "Enter a Cartesia Voice ID first."
+      );
+
+      setGeneratedVoiceStatus(
+        "⚠️ Cartesia Voice ID is required."
+      );
+
+      return;
+    }
+
+    stopGeneratedVoice();
+
+    if (generatedVoiceUrl) {
+      URL.revokeObjectURL(
+        generatedVoiceUrl
+      );
+    }
+
+    setGeneratedVoiceUrl("");
+    setGeneratedVoiceError("");
+    setIsGeneratingVoice(true);
+
+    setGeneratedVoiceStatus(
+      "⏳ BOMBA AI is sending your dialogue to Cartesia..."
+    );
+
+    try {
+      console.log(
+        "BOMBA CARTESIA FRONTEND VOICE REQUEST STARTED"
+      );
+
+      const response = await fetch(
+        "/api/voice/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            voiceId: cleanVoiceId,
+            language: voiceLanguage,
+          }),
+        }
+      );
+
+      console.log(
+        "BOMBA CARTESIA FRONTEND VOICE STATUS:",
+        response.status
+      );
+
+      if (!response.ok) {
+        const errorText =
+          await response.text();
+
+        let errorData = {};
+
+        try {
+          errorData = errorText
+            ? JSON.parse(errorText)
+            : {};
+        } catch (error) {
+          errorData = {};
+        }
+
+        throw new Error(
+          errorData?.error ||
+            errorText ||
+            `Voice generation failed with HTTP ${response.status}.`
+        );
+      }
+
+      /*
+       * IMPORTANT:
+       * /api/voice/generate returns RAW MP3 BYTES.
+       * It does NOT return JSON.
+       */
+
+      const audioBuffer =
+        await response.arrayBuffer();
+
+      if (!audioBuffer.byteLength) {
+        throw new Error(
+          "Cartesia returned an empty audio file."
+        );
+      }
+
+      const audioBlob =
+        new Blob(
+          [audioBuffer],
+          {
+            type: "audio/mpeg",
+          }
+        );
+
+      const audioUrl =
+        URL.createObjectURL(
+          audioBlob
+        );
+
+      setGeneratedVoiceUrl(
+        audioUrl
+      );
+
+      setGeneratedVoiceStatus(
+        "✅ AI voice created successfully. Press PLAY AI VOICE."
+      );
+
+      console.log(
+        "BOMBA CARTESIA VOICE AUDIO READY:",
+        audioBuffer.byteLength,
+        "bytes"
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA CARTESIA VOICE GENERATION ERROR:",
+        error
+      );
+
+      const message =
+        error?.message ||
+        "Unable to generate AI voice.";
+
+      setGeneratedVoiceError(
+        message
+      );
+
+      setGeneratedVoiceStatus(
+        `❌ ${message}`
+      );
+    } finally {
+      setIsGeneratingVoice(false);
+    }
+  }
+
+  /* =======================================================
+     PLAY GENERATED AI VOICE
+  ======================================================= */
+
+  function playGeneratedVoice() {
+    if (!generatedVoiceUrl) {
+      setGeneratedVoiceStatus(
+        "⚠️ Generate a voice first."
+      );
+
+      return;
+    }
+
+    stopGeneratedVoice();
+
+    try {
+      setGeneratedVoiceStatus(
+        "⏳ Loading generated AI voice..."
+      );
+
+      const audio =
+        new Audio(
+          generatedVoiceUrl
+        );
+
+      audio.preload = "auto";
+
+      generatedVoiceRef.current =
+        audio;
+
+      audio.onloadeddata = () => {
+        console.log(
+          "BOMBA GENERATED VOICE LOADED"
+        );
+      };
+
+      audio.onended = () => {
+        setGeneratedVoiceStatus(
+          "🎙️ AI voice finished. Ready again."
+        );
+      };
+
+      audio.onerror = () => {
+        console.error(
+          "BOMBA GENERATED VOICE ERROR:",
+          audio.error
+        );
+
+        setGeneratedVoiceStatus(
+          "❌ Generated voice could not be played."
+        );
+      };
+
+      const promise =
+        audio.play();
+
+      if (promise) {
+        promise
+          .then(() => {
+            setGeneratedVoiceStatus(
+              "▶️ AI voice is playing."
+            );
+          })
+          .catch((error) => {
+            console.error(
+              "BOMBA GENERATED VOICE PLAY ERROR:",
+              error
+            );
+
+            setGeneratedVoiceStatus(
+              "❌ Browser blocked the generated voice."
+            );
+          });
+      }
+    } catch (error) {
+      console.error(
+        "BOMBA GENERATED VOICE ERROR:",
+        error
+      );
+
+      setGeneratedVoiceStatus(
+        "❌ Unable to play generated voice."
+      );
+    }
+  }
+
+  /* =======================================================
      UI
-  ========================================================= */
+  ======================================================= */
 
   return (
     <section
@@ -445,6 +740,454 @@ export default function StudioBoard() {
       </div>
 
       {/* =====================================================
+          VOICE STUDIO
+      ===================================================== */}
+
+      {activeModule === "VOICE" && (
+        <div
+          style={{
+            marginTop: "14px",
+            padding: "14px",
+            borderRadius: "12px",
+            border:
+              "1px solid rgba(255,212,59,0.20)",
+            background:
+              "rgba(255,212,59,0.04)",
+          }}
+        >
+          {/* VOICE HEADER */}
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "700",
+                  letterSpacing: "1px",
+                  opacity: 0.55,
+                }}
+              >
+                VOICE STUDIO
+              </div>
+
+              <h3
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: "16px",
+                  fontWeight: "800",
+                }}
+              >
+                🎙️ AI Voice
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                stopGeneratedVoice();
+                setActiveModule(null);
+              }}
+              style={{
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color: "inherit",
+                borderRadius: "8px",
+                padding: "6px 9px",
+                fontSize: "11px",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          {/* VOICE GENERATOR */}
+
+          <div
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              border:
+                "1px solid rgba(255,212,59,0.30)",
+              background:
+                "rgba(255,212,59,0.07)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "800",
+                letterSpacing: "1px",
+                marginBottom: "5px",
+              }}
+            >
+              ✨ BOMBA AI VOICE GENERATOR
+            </div>
+
+            <div
+              style={{
+                fontSize: "9px",
+                opacity: 0.55,
+                lineHeight: 1.5,
+                marginBottom: "10px",
+              }}
+            >
+              Turn your dialogue into realistic
+              AI speech using Cartesia.
+            </div>
+
+            {/* LANGUAGE */}
+
+            <label
+              style={{
+                display: "block",
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              LANGUAGE
+            </label>
+
+            <select
+              value={voiceLanguage}
+              onChange={(event) =>
+                setVoiceLanguage(
+                  event.target.value
+                )
+              }
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px",
+                marginBottom: "9px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(0,0,0,0.35)",
+                color: "inherit",
+                fontSize: "10px",
+              }}
+            >
+              <option value="English">
+                English
+              </option>
+
+              <option value="Nigerian English">
+                Nigerian English
+              </option>
+
+              <option value="Nigerian Pidgin">
+                Nigerian Pidgin
+              </option>
+            </select>
+
+            {/* VOICE ID */}
+
+            <label
+              style={{
+                display: "block",
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              CARTESIA VOICE ID
+            </label>
+
+            <input
+              type="text"
+              value={voiceId}
+              onChange={(event) =>
+                setVoiceId(
+                  event.target.value
+                )
+              }
+              placeholder="Paste your Cartesia Voice ID here"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px",
+                marginBottom: "9px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(0,0,0,0.25)",
+                color: "inherit",
+                fontSize: "10px",
+                outline: "none",
+              }}
+            />
+
+            {/* DIALOGUE */}
+
+            <label
+              style={{
+                display: "block",
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              DIALOGUE / SCRIPT
+            </label>
+
+            <textarea
+              value={voiceText}
+              onChange={(event) =>
+                setVoiceText(
+                  event.target.value
+                )
+              }
+              rows={6}
+              maxLength={5000}
+              placeholder="Enter the dialogue you want your AI character to speak..."
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                resize: "vertical",
+                padding: "10px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(0,0,0,0.25)",
+                color: "inherit",
+                fontSize: "11px",
+                lineHeight: 1.5,
+                outline: "none",
+              }}
+            />
+
+            <div
+              style={{
+                marginTop: "5px",
+                textAlign: "right",
+                fontSize: "8px",
+                opacity: 0.4,
+              }}
+            >
+              {voiceText.length} / 5000
+            </div>
+
+            {/* GENERATE BUTTON */}
+
+            <button
+              type="button"
+              onClick={
+                generateAIVoice
+              }
+              disabled={
+                isGeneratingVoice
+              }
+              style={{
+                width: "100%",
+                marginTop: "9px",
+                padding: "12px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,212,59,0.45)",
+                background:
+                  "rgba(255,212,59,0.15)",
+                color: "inherit",
+                fontSize: "10px",
+                fontWeight: "800",
+                cursor:
+                  isGeneratingVoice
+                    ? "wait"
+                    : "pointer",
+                opacity:
+                  isGeneratingVoice
+                    ? 0.65
+                    : 1,
+              }}
+            >
+              {isGeneratingVoice
+                ? "⏳ CREATING AI VOICE..."
+                : "🎙️ GENERATE AI VOICE"}
+            </button>
+
+            {/* STATUS */}
+
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "9px",
+                borderRadius: "8px",
+                background:
+                  "rgba(0,0,0,0.20)",
+                fontSize: "9px",
+                lineHeight: 1.5,
+                textAlign: "center",
+              }}
+            >
+              {generatedVoiceStatus}
+            </div>
+
+            {/* ERROR */}
+
+            {generatedVoiceError && (
+              <div
+                style={{
+                  marginTop: "7px",
+                  padding: "8px",
+                  borderRadius: "7px",
+                  background:
+                    "rgba(255,70,70,0.08)",
+                  border:
+                    "1px solid rgba(255,70,70,0.20)",
+                  fontSize: "8px",
+                  lineHeight: 1.5,
+                  wordBreak: "break-word",
+                }}
+              >
+                {generatedVoiceError}
+              </div>
+            )}
+
+            {/* GENERATED VOICE */}
+
+            {generatedVoiceUrl && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background:
+                    "rgba(0,0,0,0.25)",
+                  border:
+                    "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: "800",
+                    marginBottom: "7px",
+                  }}
+                >
+                  ✅ AI VOICE READY
+                </div>
+
+                <audio
+                  controls
+                  preload="metadata"
+                  src={generatedVoiceUrl}
+                  onPlay={() =>
+                    setGeneratedVoiceStatus(
+                      "▶️ AI voice is playing."
+                    )
+                  }
+                  onPause={() =>
+                    setGeneratedVoiceStatus(
+                      "⏸️ AI voice paused."
+                    )
+                  }
+                  onEnded={() =>
+                    setGeneratedVoiceStatus(
+                      "🎙️ AI voice finished."
+                    )
+                  }
+                  onError={() =>
+                    setGeneratedVoiceStatus(
+                      "❌ Browser could not load the generated voice."
+                    )
+                  }
+                  style={{
+                    width: "100%",
+                    height: "40px",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={
+                    playGeneratedVoice
+                  }
+                  style={{
+                    width: "100%",
+                    marginTop: "8px",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border:
+                      "1px solid rgba(255,212,59,0.35)",
+                    background:
+                      "rgba(255,212,59,0.08)",
+                    color: "inherit",
+                    fontSize: "10px",
+                    fontWeight: "800",
+                    cursor: "pointer",
+                  }}
+                >
+                  ▶️ PLAY AI VOICE
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* VOICE WORKFLOW */}
+
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "11px",
+              borderRadius: "9px",
+              background:
+                "rgba(255,255,255,0.035)",
+              border:
+                "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              🎙️ VOICE WORKFLOW
+            </div>
+
+            <div
+              style={{
+                fontSize: "9px",
+                lineHeight: 1.6,
+                opacity: 0.55,
+              }}
+            >
+              Enter dialogue → choose language →
+              enter Cartesia voice → generate →
+              preview → use in your video.
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: "9px",
+              textAlign: "center",
+              fontSize: "8px",
+              lineHeight: 1.5,
+              opacity: 0.38,
+            }}
+          >
+            BOMBA Voice Studio — powered by Cartesia.
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
           SOUND STUDIO
       ===================================================== */}
 
@@ -498,7 +1241,6 @@ export default function StudioBoard() {
               type="button"
               onClick={() => {
                 stopGeneratedSound();
-
                 setActiveModule(null);
               }}
               style={{
