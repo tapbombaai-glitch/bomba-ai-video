@@ -24,54 +24,8 @@ function safeParse(text) {
   }
 }
 
-async function proxyVideo(videoUrl) {
-  try {
-    const response = await fetch(videoUrl, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        {
-          status: "failed",
-          error: `Failed to download video (HTTP ${response.status})`,
-        },
-        { status: 502 }
-      );
-    }
-
-    const contentType =
-      response.headers.get("content-type") ||
-      "video/mp4";
-
-    const buffer = await response.arrayBuffer();
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(buffer.byteLength),
-        "Cache-Control": "public, max-age=3600",
-      },
-    });
-  } catch (error) {
-    console.error(
-      "BOMBA ETERNAL AI PROXY ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        status: "failed",
-        error: "Could not proxy the generated video.",
-      },
-      { status: 502 }
-    );
-  }
-}
-
 /* =========================================================
-   POST → START ETERNAL AI GENERATION
+   POST → START ETERNAL AI VIDEO GENERATION
 ========================================================= */
 
 export async function POST(request) {
@@ -101,7 +55,9 @@ export async function POST(request) {
         : "";
 
     const mode =
-      body?.mode || "Story";
+      typeof body?.mode === "string"
+        ? body.mode
+        : "Story";
 
     if (!imageData) {
       return NextResponse.json(
@@ -131,20 +87,12 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
 
     const payload = {
       prompt: finalPrompt,
-
       image_url: imageData,
-
       model_id: ETERNALAI_MODEL,
-
       duration: "5",
-
       aspect_ratio: "16:9",
-
       resolution: "480p",
-
-      negative_prompt:
-        DEFAULT_NEGATIVE_PROMPT,
-
+      negative_prompt: DEFAULT_NEGATIVE_PROMPT,
       cfg_scale: 0.5,
     };
 
@@ -163,24 +111,20 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       ETERNALAI_SUBMIT_URL,
       {
         method: "POST",
-
         headers: {
           Authorization:
             `Bearer ${ETERNALAI_API_KEY}`,
-
           "Content-Type":
             "application/json",
         },
-
         body: JSON.stringify(payload),
+        cache: "no-store",
       }
     );
 
-    const text =
-      await response.text();
+    const text = await response.text();
 
-    const data =
-      safeParse(text);
+    const data = safeParse(text);
 
     console.log(
       "BOMBA ETERNAL AI START STATUS:",
@@ -196,18 +140,17 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             data?.error ||
             data?.detail ||
             `Eternal AI returned HTTP ${response.status}`,
-
           raw: text.slice(0, 1000),
         },
         {
           status:
-            response.status === 402
-              ? 402
+            response.status >= 400 &&
+            response.status < 500
+              ? response.status
               : 502,
         }
       );
@@ -222,10 +165,8 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             "Eternal AI did not return a request ID.",
-
           raw: text.slice(0, 1000),
         },
         { status: 502 }
@@ -237,15 +178,20 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
       requestId
     );
 
-    return NextResponse.json({
-      status: "queued",
-
-      id: requestId,
-
-      jobId: requestId,
-
-      predictionId: requestId,
-    });
+    return NextResponse.json(
+      {
+        status: "queued",
+        id: requestId,
+        jobId: requestId,
+        predictionId: requestId,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error(
       "BOMBA ETERNAL AI POST ERROR:",
@@ -255,7 +201,6 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
     return NextResponse.json(
       {
         status: "failed",
-
         error:
           error?.message ||
           "Unexpected error while starting video generation.",
@@ -266,7 +211,7 @@ Photorealistic live-action video, cinematic lighting, natural human movement, re
 }
 
 /* =========================================================
-   GET → CHECK STATUS / RETURN VIDEO
+   GET → CHECK VIDEO GENERATION STATUS
 ========================================================= */
 
 export async function GET(request) {
@@ -275,7 +220,6 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             "ETERNALAI_API_KEY is missing.",
         },
@@ -296,7 +240,6 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             "Missing generation ID.",
         },
@@ -310,8 +253,8 @@ export async function GET(request) {
       )}/status`;
 
     console.log(
-      "BOMBA ETERNAL AI STATUS URL:",
-      statusUrl
+      "BOMBA ETERNAL AI STATUS CHECK:",
+      requestId
     );
 
     const statusRes =
@@ -319,12 +262,10 @@ export async function GET(request) {
         statusUrl,
         {
           method: "GET",
-
           headers: {
             Authorization:
               `Bearer ${ETERNALAI_API_KEY}`,
           },
-
           cache: "no-store",
         }
       );
@@ -336,6 +277,11 @@ export async function GET(request) {
       safeParse(statusText);
 
     console.log(
+      "BOMBA ETERNAL AI STATUS HTTP:",
+      statusRes.status
+    );
+
+    console.log(
       "BOMBA ETERNAL AI STATUS RESPONSE:",
       statusText.slice(0, 1200)
     );
@@ -344,14 +290,11 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             statusData?.error ||
             statusData?.detail ||
             `Eternal AI status check failed (HTTP ${statusRes.status})`,
-
           raw: statusText.slice(0, 800),
-
           jobId: requestId,
         },
         { status: 502 }
@@ -365,27 +308,38 @@ export async function GET(request) {
     const generationStatus =
       String(
         result?.status ||
+        statusData?.status ||
         ""
       ).toLowerCase();
 
     const progress =
-      result?.progress ?? null;
+      result?.progress ??
+      statusData?.progress ??
+      null;
 
     console.log(
       "BOMBA ETERNAL AI JOB STATUS:",
       {
         requestId,
-
-        status:
-          generationStatus,
-
+        status: generationStatus,
         progress,
       }
     );
 
-    /* -----------------------------------------
-       STILL WORKING
-    ----------------------------------------- */
+    /* =====================================================
+       FIND VIDEO URL
+    ===================================================== */
+
+    const videoUrl =
+      result?.video_url ||
+      result?.video?.url ||
+      statusData?.video_url ||
+      statusData?.video?.url ||
+      null;
+
+    /* =====================================================
+       STILL PROCESSING
+    ===================================================== */
 
     if (
       generationStatus === "pending" ||
@@ -394,20 +348,25 @@ export async function GET(request) {
       generationStatus === "in_queue" ||
       generationStatus === "in_progress"
     ) {
-      return NextResponse.json({
-        status: "processing",
-
-        jobId: requestId,
-
-        id: requestId,
-
-        progress,
-      });
+      return NextResponse.json(
+        {
+          status: "processing",
+          jobId: requestId,
+          id: requestId,
+          progress,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
+      );
     }
 
-    /* -----------------------------------------
+    /* =====================================================
        FAILED
-    ----------------------------------------- */
+    ===================================================== */
 
     if (
       generationStatus === "failed" ||
@@ -416,48 +375,41 @@ export async function GET(request) {
       return NextResponse.json(
         {
           status: "failed",
-
           error:
             result?.error ||
             statusData?.error ||
             "Eternal AI video generation failed.",
-
           jobId: requestId,
         },
         { status: 502 }
       );
     }
 
-    /* -----------------------------------------
+    /* =====================================================
        COMPLETED
-    ----------------------------------------- */
+       
+       IMPORTANT:
+       Do NOT download the MP4 through Vercel.
+       Return the original Eternal AI video URL.
+       This avoids the 413 Payload Too Large problem.
+    ===================================================== */
 
     if (
       generationStatus === "completed" ||
       generationStatus === "success" ||
       generationStatus === "succeeded"
     ) {
-      const videoUrl =
-        result?.video_url ||
-        result?.video?.url ||
-        statusData?.video_url ||
-        statusData?.video?.url ||
-        null;
-
       if (!videoUrl) {
         return NextResponse.json(
           {
             status: "failed",
-
             error:
               "Generation completed but Eternal AI returned no video URL.",
-
             raw:
               statusText.slice(
                 0,
                 1000
               ),
-
             jobId: requestId,
           },
           { status: 502 }
@@ -465,41 +417,70 @@ export async function GET(request) {
       }
 
       console.log(
-        "BOMBA ETERNAL AI VIDEO URL:",
+        "BOMBA ETERNAL AI VIDEO READY:",
         videoUrl
       );
 
-      return proxyVideo(videoUrl);
+      return NextResponse.json(
+        {
+          status: "completed",
+          jobId: requestId,
+          id: requestId,
+          videoUrl,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
+      );
     }
 
-    /* -----------------------------------------
-       VIDEO URL EXISTS
-    ----------------------------------------- */
+    /* =====================================================
+       VIDEO URL EXISTS EVEN IF STATUS NAME IS DIFFERENT
+    ===================================================== */
 
-    if (result?.video_url) {
+    if (videoUrl) {
       console.log(
-        "BOMBA ETERNAL AI VIDEO URL:",
-        result.video_url
+        "BOMBA ETERNAL AI VIDEO URL FOUND:",
+        videoUrl
       );
 
-      return proxyVideo(
-        result.video_url
+      return NextResponse.json(
+        {
+          status: "completed",
+          jobId: requestId,
+          id: requestId,
+          videoUrl,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    /* -----------------------------------------
+    /* =====================================================
        UNKNOWN STATUS
-    ----------------------------------------- */
+    ===================================================== */
 
-    return NextResponse.json({
-      status: "processing",
-
-      jobId: requestId,
-
-      id: requestId,
-
-      progress,
-    });
+    return NextResponse.json(
+      {
+        status: "processing",
+        jobId: requestId,
+        id: requestId,
+        progress,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error(
       "BOMBA ETERNAL AI GET ERROR:",
@@ -509,7 +490,6 @@ export async function GET(request) {
     return NextResponse.json(
       {
         status: "failed",
-
         error:
           error?.message ||
           "Error while checking Eternal AI video generation.",
