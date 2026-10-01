@@ -234,13 +234,15 @@ export default function Home() {
     }
 
     return null;
-    };
+  };
 
   /* =====================================================
      FINALIZE VIDEO WITH BOMBA AI VOICE
   ===================================================== */
 
-  const finalizeVideoWithVoice = async (generatedVideoUrl) => {
+  const finalizeVideoWithVoice = async (
+    generatedVideoUrl
+  ) => {
     if (!generatedVideoUrl) {
       return generatedVideoUrl;
     }
@@ -535,18 +537,16 @@ export default function Home() {
           }
 
           const finalVideoUrl =
-  await finalizeVideoWithVoice(
-    returnedVideoUrl
-  );
+            await finalizeVideoWithVoice(
+              returnedVideoUrl
+            );
 
-setVideoUrl(
-  finalVideoUrl
-);
+          setVideoUrl(
+            finalVideoUrl
+          );
 
-setStatus(
-  "Video ready with BOMBA AI voice! 🎬🎙️"
-);
-            "Video ready! 🎬"
+          setStatus(
+            "Video ready with BOMBA AI voice! 🎬🎙️"
           );
 
           setError("");
@@ -862,10 +862,6 @@ ${prompt}
               prompt:
                 realisticPrompt,
 
-              /*
-                Keep both fields so the backend can
-                use the imageData field explicitly.
-              */
               imageData:
                 characterImage,
 
@@ -941,17 +937,18 @@ ${prompt}
           );
 
           const finalVideoUrl =
-  await finalizeVideoWithVoice(
-    directVideoUrl
-  );
+            await finalizeVideoWithVoice(
+              directVideoUrl
+            );
 
-setVideoUrl(
-  finalVideoUrl
-);
+          setVideoUrl(
+            finalVideoUrl
+          );
 
-setStatus(
-  "Video ready with BOMBA AI voice! 🎬🎙️"
-);
+          setStatus(
+            "Video ready with BOMBA AI voice! 🎬🎙️"
+          );
+
           setError("");
           setLoading(false);
 
