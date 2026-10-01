@@ -8,6 +8,7 @@ const NAIJALINGO_URL = "https://api.9jalingo.org/v1/audio/speech";
 
 export async function POST(request) {
   try {
+    // Check that Vercel has the secret
     if (!NAIJALINGO_API_KEY) {
       return NextResponse.json(
         {
@@ -35,6 +36,7 @@ export async function POST(request) {
         ? body.language.trim()
         : "";
 
+    // Validate text
     if (!text) {
       return NextResponse.json(
         {
@@ -45,6 +47,7 @@ export async function POST(request) {
       );
     }
 
+    // Validate voice
     if (!voiceId) {
       return NextResponse.json(
         {
@@ -55,6 +58,7 @@ export async function POST(request) {
       );
     }
 
+    // Validate language
     if (!language) {
       return NextResponse.json(
         {
@@ -65,6 +69,7 @@ export async function POST(request) {
       );
     }
 
+    // Protect the API from oversized requests
     if (text.length > 5000) {
       return NextResponse.json(
         {
@@ -76,20 +81,30 @@ export async function POST(request) {
       );
     }
 
+    console.log("======================================");
     console.log("BOMBA 9JALINGO VOICE STARTING");
-    console.log("BOMBA 9JALINGO VOICE:", voiceId);
-    console.log("BOMBA 9JALINGO LANGUAGE:", language);
-    console.log("BOMBA 9JALINGO TEXT LENGTH:", text.length);
+    console.log("VOICE:", voiceId);
+    console.log("LANGUAGE:", language);
+    console.log("TEXT LENGTH:", text.length);
+    console.log("API KEY FOUND: YES");
+    console.log("======================================");
 
     const response = await fetch(NAIJALINGO_URL, {
       method: "POST",
+
       headers: {
+        // Send authentication using both common formats.
+        // The secret itself is NEVER logged.
         Authorization: `Bearer ${NAIJALINGO_API_KEY}`,
+        "X-API-Key": NAIJALINGO_API_KEY,
+
         "Content-Type": "application/json",
+        Accept: "audio/mpeg, application/json",
       },
+
       body: JSON.stringify({
-        voice: voiceId,
         input: text,
+        voice: voiceId,
         lang: language,
         response_format: "mp3",
       }),
@@ -100,6 +115,7 @@ export async function POST(request) {
       response.status
     );
 
+    // Read the response if 9jaLingo rejected it
     if (!response.ok) {
       const errorText = await response.text();
 
@@ -115,10 +131,13 @@ export async function POST(request) {
             errorText ||
             `9jaLingo request failed with status ${response.status}.`,
         },
-        { status: response.status }
+        {
+          status: response.status,
+        }
       );
     }
 
+    // Get generated audio
     const audioBuffer = await response.arrayBuffer();
 
     console.log(
@@ -137,6 +156,7 @@ export async function POST(request) {
       );
     }
 
+    // Return MP3 directly to the BOMBA frontend
     return new Response(audioBuffer, {
       status: 200,
       headers: {
