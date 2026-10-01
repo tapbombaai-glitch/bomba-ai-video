@@ -952,7 +952,6 @@ setVideoUrl(
 setStatus(
   "Video ready with BOMBA AI voice! 🎬🎙️"
 );
-
           setError("");
           setLoading(false);
 
