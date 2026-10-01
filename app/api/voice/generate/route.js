@@ -69,7 +69,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "Voice text is too long. Maximum is 5000 characters.",
+          error:
+            "Voice text is too long. Maximum is 5000 characters.",
         },
         { status: 400 }
       );
@@ -80,14 +81,13 @@ export async function POST(request) {
     console.log("BOMBA 9JALINGO LANGUAGE:", language);
     console.log("BOMBA 9JALINGO TEXT LENGTH:", text.length);
 
-    const response = await fetch(NAIJALINGO_API_URL, {
+    const response = await fetch(NAIJALINGO_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${NAIJALINGO_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "9jalingo-tts-1",
         voice: voiceId,
         input: text,
         lang: language,
@@ -126,6 +126,16 @@ export async function POST(request) {
       audioBuffer.byteLength,
       "bytes"
     );
+
+    if (!audioBuffer.byteLength) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error: "9jaLingo returned an empty audio file.",
+        },
+        { status: 502 }
+      );
+    }
 
     return new Response(audioBuffer, {
       status: 200,
