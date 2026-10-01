@@ -2,10 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/* =========================================================
-   PRODUCTION WORKFLOW
-========================================================= */
-
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
   { number: "02", name: "PLAN", icon: "📋" },
@@ -20,9 +16,24 @@ const modules = [
   { number: "11", name: "EXPORT", icon: "📤" },
 ];
 
-/* =========================================================
-   CLOUDINARY CONFIG
-========================================================= */
+const CONFIRMED_VOICES = {
+  pcm: [
+    { id: "ada_pcm", name: "Ada", gender: "Female" },
+    { id: "blessing_pcm", name: "Blessing", gender: "Female" },
+  ],
+  ig: [
+    { id: "adaeze_ig", name: "Adaeze", gender: "Female" },
+    { id: "ifeanyi_ig", name: "Ifeanyi", gender: "Male" },
+  ],
+  yo: [
+    { id: "adeola_yo", name: "Adeola", gender: "Female" },
+    { id: "adekunle_yo", name: "Adekunle", gender: "Male" },
+  ],
+  ha: [
+    { id: "aisha_ha", name: "Aisha", gender: "Female" },
+    { id: "bello_ha", name: "Bello", gender: "Male" },
+  ],
+};
 
 const CLOUDINARY_CLOUD_NAME =
   process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "";
@@ -31,21 +42,9 @@ const CLOUDINARY_VOICE_PRESET =
   process.env.NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
   "bomba_voice";
 
-/* =========================================================
-   CLOUDINARY VOICE UPLOAD
-========================================================= */
-
 async function uploadVoiceToCloudinary(audioBlob) {
   if (!CLOUDINARY_CLOUD_NAME) {
-    throw new Error(
-      "Cloudinary Cloud Name is not configured."
-    );
-  }
-
-  if (!CLOUDINARY_VOICE_PRESET) {
-    throw new Error(
-      "Cloudinary voice upload preset is not configured."
-    );
+    throw new Error("Cloudinary Cloud Name is not configured.");
   }
 
   const uploadUrl =
@@ -56,10 +55,7 @@ async function uploadVoiceToCloudinary(audioBlob) {
   const formData = new FormData();
 
   formData.append("file", audioBlob, "bomba-voice.mp3");
-  formData.append(
-    "upload_preset",
-    CLOUDINARY_VOICE_PRESET
-  );
+  formData.append("upload_preset", CLOUDINARY_VOICE_PRESET);
 
   const response = await fetch(uploadUrl, {
     method: "POST",
@@ -93,15 +89,11 @@ async function uploadVoiceToCloudinary(audioBlob) {
   return data;
 }
 
-/* =========================================================
-   STUDIO BOARD
-========================================================= */
-
 export default function StudioBoard() {
   const [activeModule, setActiveModule] = useState(null);
 
   /* =======================================================
-     AI SOUND STATE
+     SOUND
   ======================================================= */
 
   const [soundPrompt, setSoundPrompt] = useState(
@@ -109,48 +101,64 @@ export default function StudioBoard() {
   );
 
   const [soundDuration, setSoundDuration] = useState(5);
-
-  const [generatedAudioUrl, setGeneratedAudioUrl] =
-    useState("");
-
-  const [isGeneratingSound, setIsGeneratingSound] =
-    useState(false);
-
+  const [generatedAudioUrl, setGeneratedAudioUrl] = useState("");
+  const [isGeneratingSound, setIsGeneratingSound] = useState(false);
   const [generatedSoundStatus, setGeneratedSoundStatus] =
     useState("Ready to create AI sound.");
-
-  const [generatedSoundError, setGeneratedSoundError] =
-    useState("");
+  const [generatedSoundError, setGeneratedSoundError] = useState("");
 
   const generatedAudioRef = useRef(null);
 
   /* =======================================================
-     9JALINGO VOICE STATE
+     VOICE
   ======================================================= */
 
   const [voiceText, setVoiceText] = useState(
     "Welcome to BOMBA AI. No stress, we go help you create your video. Just describe wetin you want, and BOMBA AI go build am."
   );
 
-  const [voiceLanguage, setVoiceLanguage] =
-    useState("pcm");
+  const [voiceLanguage, setVoiceLanguage] = useState("pcm");
 
-  const [voiceId, setVoiceId] =
-    useState("ada_pcm");
+  const [voiceId, setVoiceId] = useState("ada_pcm");
 
-  const [generatedVoiceUrl, setGeneratedVoiceUrl] =
-    useState("");
+  const [availableVoices, setAvailableVoices] = useState(
+    CONFIRMED_VOICES.pcm
+  );
 
-  const [isGeneratingVoice, setIsGeneratingVoice] =
-    useState(false);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+
+  const [generatedVoiceUrl, setGeneratedVoiceUrl] = useState("");
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
 
   const [generatedVoiceStatus, setGeneratedVoiceStatus] =
     useState("Ready to create AI voice.");
 
-  const [generatedVoiceError, setGeneratedVoiceError] =
-    useState("");
+  const [generatedVoiceError, setGeneratedVoiceError] = useState("");
 
   const generatedVoiceRef = useRef(null);
+
+  /* =======================================================
+     LOAD VOICES
+  ======================================================= */
+
+  useEffect(() => {
+    if (activeModule !== "VOICE") return;
+
+    const voices =
+      CONFIRMED_VOICES[voiceLanguage] || [];
+
+    setAvailableVoices(voices);
+
+    setVoiceId((current) => {
+      const exists = voices.some(
+        (voice) => voice.id === current
+      );
+
+      return exists
+        ? current
+        : voices[0]?.id || "";
+    });
+  }, [activeModule, voiceLanguage]);
 
   /* =======================================================
      CLEANUP
@@ -163,47 +171,31 @@ export default function StudioBoard() {
     };
   }, []);
 
-  /* =======================================================
-     STOP GENERATED SOUND
-  ======================================================= */
-
   function stopGeneratedSound() {
     if (generatedAudioRef.current) {
       try {
         generatedAudioRef.current.pause();
         generatedAudioRef.current.currentTime = 0;
-      } catch {
-        console.log(
-          "Generated audio cleanup skipped."
-        );
-      }
+      } catch {}
 
       generatedAudioRef.current = null;
     }
   }
-
-  /* =======================================================
-     STOP GENERATED VOICE
-  ======================================================= */
 
   function stopGeneratedVoice() {
     if (generatedVoiceRef.current) {
       try {
         generatedVoiceRef.current.pause();
         generatedVoiceRef.current.currentTime = 0;
-      } catch {
-        console.log(
-          "Generated voice cleanup skipped."
-        );
-      }
+      } catch {}
 
       generatedVoiceRef.current = null;
     }
   }
 
   /* =======================================================
-     GENERATE AI SOUND
-     EXISTING WORKING SYSTEM — UNCHANGED
+     SOUND GENERATION
+     EXISTING SYSTEM PRESERVED
   ======================================================= */
 
   async function generateAISound() {
@@ -237,8 +229,7 @@ export default function StudioBoard() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             type: "Background Music",
@@ -319,10 +310,6 @@ export default function StudioBoard() {
     }
   }
 
-  /* =======================================================
-     PLAY GENERATED AI SOUND
-  ======================================================= */
-
   function playGeneratedSound() {
     if (!generatedAudioUrl) {
       setGeneratedSoundStatus(
@@ -378,12 +365,15 @@ export default function StudioBoard() {
   }
 
   /* =======================================================
-     GENERATE 9JALINGO AI VOICE
+     9JALINGO VOICE GENERATION
   ======================================================= */
 
   async function generateAIVoice() {
-    const cleanText = voiceText.trim();
-    const cleanVoiceId = voiceId.trim();
+    const cleanText =
+      voiceText.trim();
+
+    const cleanVoiceId =
+      voiceId.trim();
 
     if (!cleanText) {
       setGeneratedVoiceError(
@@ -399,11 +389,11 @@ export default function StudioBoard() {
 
     if (!cleanVoiceId) {
       setGeneratedVoiceError(
-        "Enter a 9jaLingo Voice ID first."
+        "Choose a 9jaLingo voice first."
       );
 
       setGeneratedVoiceStatus(
-        "⚠️ 9jaLingo Voice ID is required."
+        "⚠️ 9jaLingo voice is required."
       );
 
       return;
@@ -420,25 +410,23 @@ export default function StudioBoard() {
     );
 
     try {
-      /* ================================================
-         STEP 1 — 9JALINGO
-      ================================================= */
-
-      const response = await fetch(
-        "/api/voice/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            text: cleanText,
-            voiceId: cleanVoiceId,
-            language: voiceLanguage,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/voice/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              text: cleanText,
+              voiceId: cleanVoiceId,
+              language:
+                voiceLanguage,
+            }),
+          }
+        );
 
       if (!response.ok) {
         const errorText =
@@ -447,9 +435,12 @@ export default function StudioBoard() {
         let errorData = {};
 
         try {
-          errorData = errorText
-            ? JSON.parse(errorText)
-            : {};
+          errorData =
+            errorText
+              ? JSON.parse(
+                  errorText
+                )
+              : {};
         } catch {
           errorData = {};
         }
@@ -460,10 +451,6 @@ export default function StudioBoard() {
             `Voice generation failed with HTTP ${response.status}.`
         );
       }
-
-      /* ================================================
-         STEP 2 — RECEIVE MP3
-      ================================================= */
 
       const audioBuffer =
         await response.arrayBuffer();
@@ -482,10 +469,6 @@ export default function StudioBoard() {
           }
         );
 
-      /* ================================================
-         STEP 3 — LOCAL PREVIEW
-      ================================================= */
-
       const audioUrl =
         URL.createObjectURL(
           audioBlob
@@ -494,10 +477,6 @@ export default function StudioBoard() {
       setGeneratedVoiceUrl(
         audioUrl
       );
-
-      /* ================================================
-         STEP 4 — AUTOMATIC CLOUDINARY UPLOAD
-      ================================================= */
 
       setGeneratedVoiceStatus(
         "☁️ Uploading your voice automatically..."
@@ -510,15 +489,6 @@ export default function StudioBoard() {
 
       const voicePublicId =
         cloudinaryResult.public_id;
-
-      console.log(
-        "BOMBA CLOUDINARY VOICE READY:",
-        voicePublicId
-      );
-
-      /* ================================================
-         STEP 5 — SAVE VOICE ID FOR VIDEO PIPELINE
-      ================================================= */
 
       localStorage.setItem(
         "bomba_voice_public_id",
@@ -540,8 +510,13 @@ export default function StudioBoard() {
         cleanText
       );
 
+      localStorage.setItem(
+        "bomba_voice_id",
+        cleanVoiceId
+      );
+
       setGeneratedVoiceStatus(
-        "✅ AI voice ready. Your next video will automatically include this voice."
+        `✅ ${cleanVoiceId} voice ready. Your next video will automatically include this voice.`
       );
     } catch (error) {
       console.error(
@@ -561,13 +536,11 @@ export default function StudioBoard() {
         `❌ ${message}`
       );
     } finally {
-      setIsGeneratingVoice(false);
+      setIsGeneratingVoice(
+        false
+      );
     }
   }
-
-  /* =======================================================
-     PLAY GENERATED AI VOICE
-  ======================================================= */
 
   function playGeneratedVoice() {
     if (!generatedVoiceUrl) {
@@ -642,7 +615,11 @@ export default function StudioBoard() {
           "rgba(255,255,255,0.025)",
       }}
     >
-      <div style={{ marginBottom: "12px" }}>
+      <div
+        style={{
+          marginBottom: "12px",
+        }}
+      >
         <div
           style={{
             fontSize: "11px",
@@ -683,85 +660,120 @@ export default function StudioBoard() {
           gap: "8px",
         }}
       >
-        {modules.map((module) => (
-          <button
-            key={module.number}
-            type="button"
-            onClick={() =>
-              setActiveModule(module.name)
-            }
-            style={{
-              width: "100%",
-              minHeight: "58px",
-              padding: "9px",
-              borderRadius: "10px",
-              border:
-                activeModule === module.name
-                  ? "1px solid rgba(255,212,59,0.65)"
-                  : "1px solid rgba(255,255,255,0.10)",
-              background:
-                activeModule === module.name
-                  ? "rgba(255,212,59,0.08)"
-                  : "rgba(255,255,255,0.035)",
-              color: "inherit",
-              textAlign: "left",
-              cursor: "pointer",
-            }}
-          >
-            <div
+        {modules.map(
+          (module) => (
+            <button
+              key={
+                module.number
+              }
+              type="button"
+              onClick={() =>
+                setActiveModule(
+                  module.name
+                )
+              }
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
+                width: "100%",
+                minHeight: "58px",
+                padding: "9px",
+                borderRadius: "10px",
+                border:
+                  activeModule ===
+                  module.name
+                    ? "1px solid rgba(255,212,59,0.65)"
+                    : "1px solid rgba(255,255,255,0.10)",
+                background:
+                  activeModule ===
+                  module.name
+                    ? "rgba(255,212,59,0.08)"
+                    : "rgba(255,255,255,0.035)",
+                color: "inherit",
+                textAlign:
+                  "left",
+                cursor:
+                  "pointer",
               }}
             >
-              <span
+              <div
                 style={{
-                  fontSize: "18px",
-                  lineHeight: 1,
+                  display:
+                    "flex",
+                  alignItems:
+                    "center",
+                  gap: "8px",
                 }}
               >
-                {module.icon}
-              </span>
-
-              <span style={{ minWidth: 0 }}>
                 <span
                   style={{
-                    display: "block",
-                    fontSize: "9px",
-                    opacity: 0.45,
-                    marginBottom: "2px",
+                    fontSize:
+                      "18px",
+                    lineHeight: 1,
                   }}
                 >
-                  {module.number}
+                  {
+                    module.icon
+                  }
                 </span>
 
                 <span
                   style={{
-                    display: "block",
-                    fontSize: "11px",
-                    fontWeight: "800",
-                    letterSpacing: "0.5px",
+                    minWidth: 0,
                   }}
                 >
-                  {module.name}
+                  <span
+                    style={{
+                      display:
+                        "block",
+                      fontSize:
+                        "9px",
+                      opacity:
+                        0.45,
+                      marginBottom:
+                        "2px",
+                    }}
+                  >
+                    {
+                      module.number
+                    }
+                  </span>
+
+                  <span
+                    style={{
+                      display:
+                        "block",
+                      fontSize:
+                        "11px",
+                      fontWeight:
+                        "800",
+                      letterSpacing:
+                        "0.5px",
+                    }}
+                  >
+                    {
+                      module.name
+                    }
+                  </span>
                 </span>
-              </span>
-            </div>
-          </button>
-        ))}
+              </div>
+            </button>
+          )
+        )}
       </div>
 
       {/* =====================================================
           VOICE STUDIO
       ===================================================== */}
 
-      {activeModule === "VOICE" && (
+      {activeModule ===
+        "VOICE" && (
         <div
           style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
+            marginTop:
+              "14px",
+            padding:
+              "14px",
+            borderRadius:
+              "12px",
             border:
               "1px solid rgba(255,212,59,0.20)",
             background:
@@ -770,20 +782,28 @@ export default function StudioBoard() {
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
               gap: "10px",
-              marginBottom: "12px",
+              marginBottom:
+                "12px",
             }}
           >
             <div>
               <div
                 style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "700",
+                  letterSpacing:
+                    "1px",
+                  opacity:
+                    0.55,
                 }}
               >
                 VOICE STUDIO
@@ -791,9 +811,12 @@ export default function StudioBoard() {
 
               <h3
                 style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
+                  margin:
+                    "4px 0 0",
+                  fontSize:
+                    "16px",
+                  fontWeight:
+                    "800",
                 }}
               >
                 🎙️ AI Voice
@@ -804,18 +827,25 @@ export default function StudioBoard() {
               type="button"
               onClick={() => {
                 stopGeneratedVoice();
-                setActiveModule(null);
+                setActiveModule(
+                  null
+                );
               }}
               style={{
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
+                color:
+                  "inherit",
+                borderRadius:
+                  "8px",
+                padding:
+                  "6px 9px",
+                fontSize:
+                  "11px",
+                cursor:
+                  "pointer",
               }}
             >
               CLOSE
@@ -824,8 +854,10 @@ export default function StudioBoard() {
 
           <div
             style={{
-              padding: "12px",
-              borderRadius: "10px",
+              padding:
+                "12px",
+              borderRadius:
+                "10px",
               border:
                 "1px solid rgba(255,212,59,0.30)",
               background:
@@ -834,10 +866,14 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                letterSpacing:
+                  "1px",
+                marginBottom:
+                  "5px",
               }}
             >
               ✨ BOMBA AI VOICE GENERATOR
@@ -845,48 +881,68 @@ export default function StudioBoard() {
 
             <div
               style={{
-                fontSize: "9px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "10px",
+                fontSize:
+                  "9px",
+                opacity:
+                  0.55,
+                lineHeight:
+                  1.5,
+                marginBottom:
+                  "10px",
               }}
             >
-              Turn your dialogue into realistic
-              AI speech using 9jaLingo.
-              Your generated voice is automatically
-              prepared for the video pipeline.
+              Choose a real 9jaLingo
+              speaker and turn your
+              dialogue into AI speech.
             </div>
 
             <label
               style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
+                display:
+                  "block",
+                fontSize:
+                  "9px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
               }}
             >
               LANGUAGE
             </label>
 
             <select
-              value={voiceLanguage}
-              onChange={(event) =>
+              value={
+                voiceLanguage
+              }
+              onChange={(
+                event
+              ) =>
                 setVoiceLanguage(
-                  event.target.value
+                  event
+                    .target
+                    .value
                 )
               }
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px",
-                marginBottom: "9px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                padding:
+                  "10px",
+                marginBottom:
+                  "9px",
+                borderRadius:
+                  "8px",
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(0,0,0,0.35)",
-                color: "inherit",
-                fontSize: "10px",
+                color:
+                  "inherit",
+                fontSize:
+                  "10px",
               }}
             >
               <option value="pcm">
@@ -908,105 +964,193 @@ export default function StudioBoard() {
 
             <label
               style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
+                display:
+                  "block",
+                fontSize:
+                  "9px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
               }}
             >
-              9JALINGO VOICE ID
+              9JALINGO VOICE
             </label>
 
-            <input
-              type="text"
+            <select
               value={voiceId}
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setVoiceId(
-                  event.target.value
+                  event
+                    .target
+                    .value
                 )
               }
-              placeholder="e.g. ada_pcm"
+              disabled={
+                isGeneratingVoice
+              }
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px",
-                marginBottom: "9px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                padding:
+                  "10px",
+                marginBottom:
+                  "9px",
+                borderRadius:
+                  "8px",
                 border:
-                  "1px solid rgba(255,255,255,0.12)",
+                  "1px solid rgba(255,212,59,0.35)",
                 background:
-                  "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "10px",
-                outline: "none",
+                  "rgba(0,0,0,0.35)",
+                color:
+                  "inherit",
+                fontSize:
+                  "10px",
+                outline:
+                  "none",
               }}
-            />
+            >
+              {availableVoices.map(
+                (voice) => (
+                  <option
+                    key={
+                      voice.id
+                    }
+                    value={
+                      voice.id
+                    }
+                  >
+                    {voice.name}
+                    {voice.gender
+                      ? ` — ${voice.gender}`
+                      : ""}
+                    {` (${voice.id})`}
+                  </option>
+                )
+              )}
+            </select>
+
+            <div
+              style={{
+                fontSize:
+                  "8px",
+                opacity:
+                  0.45,
+                marginBottom:
+                  "9px",
+              }}
+            >
+              {availableVoices.length} confirmed
+              9jaLingo speaker options.
+            </div>
 
             <label
               style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
+                display:
+                  "block",
+                fontSize:
+                  "9px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
               }}
             >
               DIALOGUE / SCRIPT
             </label>
 
             <textarea
-              value={voiceText}
-              onChange={(event) =>
+              value={
+                voiceText
+              }
+              onChange={(
+                event
+              ) =>
                 setVoiceText(
-                  event.target.value
+                  event
+                    .target
+                    .value
                 )
               }
               rows={6}
-              maxLength={5000}
+              maxLength={
+                5000
+              }
               placeholder="Enter the dialogue you want your AI character to speak..."
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                resize:
+                  "vertical",
+                padding:
+                  "10px",
+                borderRadius:
+                  "8px",
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
+                color:
+                  "inherit",
+                fontSize:
+                  "11px",
+                lineHeight:
+                  1.5,
+                outline:
+                  "none",
               }}
             />
 
             <div
               style={{
-                marginTop: "5px",
-                textAlign: "right",
-                fontSize: "8px",
-                opacity: 0.4,
+                marginTop:
+                  "5px",
+                textAlign:
+                  "right",
+                fontSize:
+                  "8px",
+                opacity:
+                  0.4,
               }}
             >
-              {voiceText.length} / 5000
+              {
+                voiceText.length
+              } / 5000
             </div>
 
             <button
               type="button"
-              onClick={generateAIVoice}
-              disabled={isGeneratingVoice}
+              onClick={
+                generateAIVoice
+              }
+              disabled={
+                isGeneratingVoice
+              }
               style={{
-                width: "100%",
-                marginTop: "9px",
-                padding: "12px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                marginTop:
+                  "9px",
+                padding:
+                  "12px",
+                borderRadius:
+                  "8px",
                 border:
                   "1px solid rgba(255,212,59,0.45)",
                 background:
                   "rgba(255,212,59,0.15)",
-                color: "inherit",
-                fontSize: "10px",
-                fontWeight: "800",
+                color:
+                  "inherit",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
                 cursor:
                   isGeneratingVoice
                     ? "wait"
@@ -1024,44 +1168,63 @@ export default function StudioBoard() {
 
             <div
               style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
+                marginTop:
+                  "10px",
+                padding:
+                  "9px",
+                borderRadius:
+                  "8px",
                 background:
                   "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.5,
+                textAlign:
+                  "center",
               }}
             >
-              {generatedVoiceStatus}
+              {
+                generatedVoiceStatus
+              }
             </div>
 
             {generatedVoiceError && (
               <div
                 style={{
-                  marginTop: "7px",
-                  padding: "8px",
-                  borderRadius: "7px",
+                  marginTop:
+                    "7px",
+                  padding:
+                    "8px",
+                  borderRadius:
+                    "7px",
                   background:
                     "rgba(255,70,70,0.08)",
                   border:
                     "1px solid rgba(255,70,70,0.20)",
-                  fontSize: "8px",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
+                  fontSize:
+                    "8px",
+                  lineHeight:
+                    1.5,
+                  wordBreak:
+                    "break-word",
                 }}
               >
-                {generatedVoiceError}
+                {
+                  generatedVoiceError
+                }
               </div>
             )}
 
             {generatedVoiceUrl && (
               <div
                 style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
+                  marginTop:
+                    "10px",
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   background:
                     "rgba(0,0,0,0.25)",
                   border:
@@ -1070,9 +1233,12 @@ export default function StudioBoard() {
               >
                 <div
                   style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "7px",
+                    fontSize:
+                      "9px",
+                    fontWeight:
+                      "800",
+                    marginBottom:
+                      "7px",
                   }}
                 >
                   ✅ AI VOICE READY
@@ -1081,30 +1247,14 @@ export default function StudioBoard() {
                 <audio
                   controls
                   preload="metadata"
-                  src={generatedVoiceUrl}
-                  onPlay={() =>
-                    setGeneratedVoiceStatus(
-                      "▶️ AI voice is playing."
-                    )
-                  }
-                  onPause={() =>
-                    setGeneratedVoiceStatus(
-                      "⏸️ AI voice paused."
-                    )
-                  }
-                  onEnded={() =>
-                    setGeneratedVoiceStatus(
-                      "🎙️ AI voice finished."
-                    )
-                  }
-                  onError={() =>
-                    setGeneratedVoiceStatus(
-                      "❌ Browser could not load the generated voice."
-                    )
+                  src={
+                    generatedVoiceUrl
                   }
                   style={{
-                    width: "100%",
-                    height: "40px",
+                    width:
+                      "100%",
+                    height:
+                      "40px",
                   }}
                 />
 
@@ -1114,18 +1264,26 @@ export default function StudioBoard() {
                     playGeneratedVoice
                   }
                   style={{
-                    width: "100%",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
+                    width:
+                      "100%",
+                    marginTop:
+                      "8px",
+                    padding:
+                      "10px",
+                    borderRadius:
+                      "8px",
                     border:
                       "1px solid rgba(255,212,59,0.35)",
                     background:
                       "rgba(255,212,59,0.08)",
-                    color: "inherit",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    cursor: "pointer",
+                    color:
+                      "inherit",
+                    fontSize:
+                      "10px",
+                    fontWeight:
+                      "800",
+                    cursor:
+                      "pointer",
                   }}
                 >
                   ▶️ PLAY AI VOICE
@@ -1136,9 +1294,12 @@ export default function StudioBoard() {
 
           <div
             style={{
-              marginTop: "12px",
-              padding: "11px",
-              borderRadius: "9px",
+              marginTop:
+                "12px",
+              padding:
+                "11px",
+              borderRadius:
+                "9px",
               background:
                 "rgba(255,255,255,0.035)",
               border:
@@ -1147,9 +1308,12 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                marginBottom: "5px",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
               }}
             >
               🎙️ VOICE WORKFLOW
@@ -1157,27 +1321,19 @@ export default function StudioBoard() {
 
             <div
               style={{
-                fontSize: "9px",
-                lineHeight: 1.6,
-                opacity: 0.55,
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.6,
+                opacity:
+                  0.55,
               }}
             >
-              Enter dialogue → choose language →
-              choose voice → generate → automatic
-              Cloudinary upload → ready for your video.
+              Choose language → choose
+              speaker → enter dialogue →
+              generate → Cloudinary upload
+              → ready for video.
             </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: "9px",
-              textAlign: "center",
-              fontSize: "8px",
-              lineHeight: 1.5,
-              opacity: 0.38,
-            }}
-          >
-            BOMBA Voice Studio — powered by 9jaLingo.
           </div>
         </div>
       )}
@@ -1186,12 +1342,16 @@ export default function StudioBoard() {
           SOUND STUDIO
       ===================================================== */}
 
-      {activeModule === "SOUND" && (
+      {activeModule ===
+        "SOUND" && (
         <div
           style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
+            marginTop:
+              "14px",
+            padding:
+              "14px",
+            borderRadius:
+              "12px",
             border:
               "1px solid rgba(255,212,59,0.20)",
             background:
@@ -1200,20 +1360,29 @@ export default function StudioBoard() {
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
+              gap:
+                "10px",
+              marginBottom:
+                "12px",
             }}
           >
             <div>
               <div
                 style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "700",
+                  letterSpacing:
+                    "1px",
+                  opacity:
+                    0.55,
                 }}
               >
                 SOUND STUDIO
@@ -1221,9 +1390,12 @@ export default function StudioBoard() {
 
               <h3
                 style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
+                  margin:
+                    "4px 0 0",
+                  fontSize:
+                    "16px",
+                  fontWeight:
+                    "800",
                 }}
               >
                 🔊 AI Sound
@@ -1234,18 +1406,25 @@ export default function StudioBoard() {
               type="button"
               onClick={() => {
                 stopGeneratedSound();
-                setActiveModule(null);
+                setActiveModule(
+                  null
+                );
               }}
               style={{
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
+                color:
+                  "inherit",
+                borderRadius:
+                  "8px",
+                padding:
+                  "6px 9px",
+                fontSize:
+                  "11px",
+                cursor:
+                  "pointer",
               }}
             >
               CLOSE
@@ -1254,8 +1433,10 @@ export default function StudioBoard() {
 
           <div
             style={{
-              padding: "12px",
-              borderRadius: "10px",
+              padding:
+                "12px",
+              borderRadius:
+                "10px",
               border:
                 "1px solid rgba(255,212,59,0.30)",
               background:
@@ -1264,10 +1445,14 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                letterSpacing:
+                  "1px",
+                marginBottom:
+                  "5px",
               }}
             >
               ✨ BOMBA AI SOUND GENERATOR
@@ -1275,93 +1460,148 @@ export default function StudioBoard() {
 
             <div
               style={{
-                fontSize: "9px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "10px",
+                fontSize:
+                  "9px",
+                opacity:
+                  0.55,
+                lineHeight:
+                  1.5,
+                marginBottom:
+                  "10px",
               }}
             >
-              Create original AI background music
-              from your own description.
+              Create original AI background
+              music from your own description.
             </div>
 
             <textarea
-              value={soundPrompt}
-              onChange={(event) =>
+              value={
+                soundPrompt
+              }
+              onChange={(
+                event
+              ) =>
                 setSoundPrompt(
-                  event.target.value
+                  event
+                    .target
+                    .value
                 )
               }
               rows={4}
               placeholder="Describe the music you want..."
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                resize:
+                  "vertical",
+                padding:
+                  "10px",
+                borderRadius:
+                  "8px",
                 border:
                   "1px solid rgba(255,255,255,0.12)",
                 background:
                   "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
+                color:
+                  "inherit",
+                fontSize:
+                  "11px",
+                lineHeight:
+                  1.5,
+                outline:
+                  "none",
               }}
             />
 
             <div
               style={{
-                display: "flex",
-                gap: "8px",
-                marginTop: "9px",
+                display:
+                  "flex",
+                gap:
+                  "8px",
+                marginTop:
+                  "9px",
               }}
             >
               <select
-                value={soundDuration}
-                onChange={(event) =>
+                value={
+                  soundDuration
+                }
+                onChange={(
+                  event
+                ) =>
                   setSoundDuration(
                     Number(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   )
                 }
                 style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
+                  flex:
+                    1,
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   border:
                     "1px solid rgba(255,255,255,0.12)",
                   background:
                     "rgba(0,0,0,0.35)",
-                  color: "inherit",
-                  fontSize: "10px",
+                  color:
+                    "inherit",
+                  fontSize:
+                    "10px",
                 }}
               >
-                <option value={5}>5 seconds</option>
-                <option value={8}>8 seconds</option>
-                <option value={10}>10 seconds</option>
-                <option value={15}>15 seconds</option>
-                <option value={20}>20 seconds</option>
-                <option value={30}>30 seconds</option>
+                <option value={5}>
+                  5 seconds
+                </option>
+                <option value={8}>
+                  8 seconds
+                </option>
+                <option value={10}>
+                  10 seconds
+                </option>
+                <option value={15}>
+                  15 seconds
+                </option>
+                <option value={20}>
+                  20 seconds
+                </option>
+                <option value={30}>
+                  30 seconds
+                </option>
               </select>
 
               <button
                 type="button"
-                onClick={generateAISound}
-                disabled={isGeneratingSound}
+                onClick={
+                  generateAISound
+                }
+                disabled={
+                  isGeneratingSound
+                }
                 style={{
-                  flex: 2,
-                  padding: "10px",
-                  borderRadius: "8px",
+                  flex:
+                    2,
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   border:
                     "1px solid rgba(255,212,59,0.45)",
                   background:
                     "rgba(255,212,59,0.15)",
-                  color: "inherit",
-                  fontSize: "10px",
-                  fontWeight: "800",
+                  color:
+                    "inherit",
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "800",
                   cursor:
                     isGeneratingSound
                       ? "wait"
@@ -1380,44 +1620,63 @@ export default function StudioBoard() {
 
             <div
               style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
+                marginTop:
+                  "10px",
+                padding:
+                  "9px",
+                borderRadius:
+                  "8px",
                 background:
                   "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.5,
+                textAlign:
+                  "center",
               }}
             >
-              {generatedSoundStatus}
+              {
+                generatedSoundStatus
+              }
             </div>
 
             {generatedSoundError && (
               <div
                 style={{
-                  marginTop: "7px",
-                  padding: "8px",
-                  borderRadius: "7px",
+                  marginTop:
+                    "7px",
+                  padding:
+                    "8px",
+                  borderRadius:
+                    "7px",
                   background:
                     "rgba(255,70,70,0.08)",
                   border:
                     "1px solid rgba(255,70,70,0.20)",
-                  fontSize: "8px",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
+                  fontSize:
+                    "8px",
+                  lineHeight:
+                    1.5,
+                  wordBreak:
+                    "break-word",
                 }}
               >
-                {generatedSoundError}
+                {
+                  generatedSoundError
+                }
               </div>
             )}
 
             {generatedAudioUrl && (
               <div
                 style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
+                  marginTop:
+                    "10px",
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
                   background:
                     "rgba(0,0,0,0.25)",
                   border:
@@ -1426,9 +1685,12 @@ export default function StudioBoard() {
               >
                 <div
                   style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "7px",
+                    fontSize:
+                      "9px",
+                    fontWeight:
+                      "800",
+                    marginBottom:
+                      "7px",
                   }}
                 >
                   ✅ AI SOUND READY
@@ -1437,30 +1699,14 @@ export default function StudioBoard() {
                 <audio
                   controls
                   preload="metadata"
-                  src={generatedAudioUrl}
-                  onPlay={() =>
-                    setGeneratedSoundStatus(
-                      "▶️ AI sound is playing."
-                    )
-                  }
-                  onPause={() =>
-                    setGeneratedSoundStatus(
-                      "⏸️ AI sound paused."
-                    )
-                  }
-                  onEnded={() =>
-                    setGeneratedSoundStatus(
-                      "🎵 AI sound finished."
-                    )
-                  }
-                  onError={() =>
-                    setGeneratedSoundStatus(
-                      "❌ Browser could not load the generated audio."
-                    )
+                  src={
+                    generatedAudioUrl
                   }
                   style={{
-                    width: "100%",
-                    height: "40px",
+                    width:
+                      "100%",
+                    height:
+                      "40px",
                   }}
                 />
 
@@ -1470,18 +1716,26 @@ export default function StudioBoard() {
                     playGeneratedSound
                   }
                   style={{
-                    width: "100%",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
+                    width:
+                      "100%",
+                    marginTop:
+                      "8px",
+                    padding:
+                      "10px",
+                    borderRadius:
+                      "8px",
                     border:
                       "1px solid rgba(255,212,59,0.35)",
                     background:
                       "rgba(255,212,59,0.08)",
-                    color: "inherit",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    cursor: "pointer",
+                    color:
+                      "inherit",
+                    fontSize:
+                      "10px",
+                    fontWeight:
+                      "800",
+                    cursor:
+                      "pointer",
                   }}
                 >
                   ▶️ PLAY AI SOUND
@@ -1492,9 +1746,12 @@ export default function StudioBoard() {
 
           <div
             style={{
-              marginTop: "12px",
-              padding: "11px",
-              borderRadius: "9px",
+              marginTop:
+                "12px",
+              padding:
+                "11px",
+              borderRadius:
+                "9px",
               background:
                 "rgba(255,255,255,0.035)",
               border:
@@ -1503,9 +1760,12 @@ export default function StudioBoard() {
           >
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                marginBottom: "5px",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
               }}
             >
               🎧 SOUND WORKFLOW
@@ -1513,27 +1773,18 @@ export default function StudioBoard() {
 
             <div
               style={{
-                fontSize: "9px",
-                lineHeight: 1.6,
-                opacity: 0.55,
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.6,
+                opacity:
+                  0.55,
               }}
             >
-              Describe the music → choose duration
-              → generate → preview → use in your
-              video project.
+              Describe the music → choose
+              duration → generate → preview
+              → use in your video project.
             </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: "9px",
-              textAlign: "center",
-              fontSize: "8px",
-              lineHeight: 1.5,
-              opacity: 0.38,
-            }}
-          >
-            BOMBA Sound Studio — AI generated sound.
           </div>
         </div>
       )}
