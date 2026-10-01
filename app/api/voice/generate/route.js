@@ -3,19 +3,16 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const CARTESIA_API_KEY = process.env.CARTESIA_API_KEY;
-const CARTESIA_URL = "https://api.cartesia.ai/tts/bytes";
-
-const CARTESIA_MODEL =
-  process.env.CARTESIA_MODEL || "sonic-3";
+const NAIJALINGO_API_KEY = process.env.NAIJALINGO_API_KEY;
+const NAIJALINGO_URL = "https://api.9jalingo.org/v1/audio/speech";
 
 export async function POST(request) {
   try {
-    if (!CARTESIA_API_KEY) {
+    if (!NAIJALINGO_API_KEY) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "Missing CARTESIA_API_KEY environment variable.",
+          error: "Missing NAIJALINGO_API_KEY environment variable.",
         },
         { status: 500 }
       );
@@ -31,6 +28,11 @@ export async function POST(request) {
     const voiceId =
       typeof body?.voiceId === "string"
         ? body.voiceId.trim()
+        : "";
+
+    const language =
+      typeof body?.language === "string"
+        ? body.language.trim()
         : "";
 
     if (!text) {
@@ -53,7 +55,16 @@ export async function POST(request) {
       );
     }
 
-    // Keep the first test reasonably small.
+    if (!language) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error: "language is required.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (text.length > 5000) {
       return NextResponse.json(
         {
@@ -64,34 +75,28 @@ export async function POST(request) {
       );
     }
 
-    console.log("BOMBA CARTESIA VOICE STARTING");
-    console.log("BOMBA CARTESIA VOICE MODEL:", CARTESIA_MODEL);
-    console.log("BOMBA CARTESIA VOICE TEXT LENGTH:", text.length);
+    console.log("BOMBA 9JALINGO VOICE STARTING");
+    console.log("BOMBA 9JALINGO VOICE:", voiceId);
+    console.log("BOMBA 9JALINGO LANGUAGE:", language);
+    console.log("BOMBA 9JALINGO TEXT LENGTH:", text.length);
 
-    const response = await fetch(CARTESIA_URL, {
+    const response = await fetch(NAIJALINGO_API_URL, {
       method: "POST",
       headers: {
-        "X-API-Key": CARTESIA_API_KEY,
-        "Cartesia-Version": "2025-04-16",
+        Authorization: `Bearer ${NAIJALINGO_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model_id: CARTESIA_MODEL,
-        transcript: text,
-        voice: {
-          mode: "id",
-          id: voiceId,
-        },
-        output_format: {
-          container: "mp3",
-          encoding: "mp3",
-          sample_rate: 44100,
-        },
+        model: "9jalingo-tts-1",
+        voice: voiceId,
+        input: text,
+        lang: language,
+        response_format: "mp3",
       }),
     });
 
     console.log(
-      "BOMBA CARTESIA VOICE STATUS:",
+      "BOMBA 9JALINGO VOICE STATUS:",
       response.status
     );
 
@@ -99,7 +104,7 @@ export async function POST(request) {
       const errorText = await response.text();
 
       console.error(
-        "BOMBA CARTESIA VOICE ERROR:",
+        "BOMBA 9JALINGO VOICE ERROR:",
         errorText
       );
 
@@ -108,7 +113,7 @@ export async function POST(request) {
           status: "failed",
           error:
             errorText ||
-            `Cartesia request failed with status ${response.status}.`,
+            `9jaLingo request failed with status ${response.status}.`,
         },
         { status: response.status }
       );
@@ -117,7 +122,7 @@ export async function POST(request) {
     const audioBuffer = await response.arrayBuffer();
 
     console.log(
-      "BOMBA CARTESIA VOICE COMPLETED:",
+      "BOMBA 9JALINGO VOICE COMPLETED:",
       audioBuffer.byteLength,
       "bytes"
     );
@@ -132,7 +137,7 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error(
-      "BOMBA CARTESIA VOICE SERVER ERROR:",
+      "BOMBA 9JALINGO VOICE SERVER ERROR:",
       error
     );
 
