@@ -52,17 +52,18 @@ export default function StudioBoard() {
   const generatedAudioRef = useRef(null);
 
   /* =======================================================
-     VOICE STATE
+     9JALINGO VOICE STATE
   ======================================================= */
 
   const [voiceText, setVoiceText] = useState(
-    "Welcome to BOMBA AI Video Studio. Turn your idea into a realistic AI video."
+    "Welcome to BOMBA AI. No stress, we go help you create your video. Just describe wetin you want, and BOMBA AI go build am."
   );
 
   const [voiceLanguage, setVoiceLanguage] =
-    useState("English");
+    useState("pcm");
 
-  const [voiceId, setVoiceId] = useState("");
+  const [voiceId, setVoiceId] =
+    useState("ada_pcm");
 
   const [generatedVoiceUrl, setGeneratedVoiceUrl] =
     useState("");
@@ -358,7 +359,7 @@ export default function StudioBoard() {
   }
 
   /* =======================================================
-     GENERATE CARTESIA AI VOICE
+     GENERATE 9JALINGO AI VOICE
   ======================================================= */
 
   async function generateAIVoice() {
@@ -379,11 +380,11 @@ export default function StudioBoard() {
 
     if (!cleanVoiceId) {
       setGeneratedVoiceError(
-        "Enter a Cartesia Voice ID first."
+        "Enter a 9jaLingo Voice ID first."
       );
 
       setGeneratedVoiceStatus(
-        "⚠️ Cartesia Voice ID is required."
+        "⚠️ 9jaLingo Voice ID is required."
       );
 
       return;
@@ -402,12 +403,12 @@ export default function StudioBoard() {
     setIsGeneratingVoice(true);
 
     setGeneratedVoiceStatus(
-      "⏳ BOMBA AI is sending your dialogue to Cartesia..."
+      "⏳ BOMBA AI is sending your dialogue to 9jaLingo..."
     );
 
     try {
       console.log(
-        "BOMBA CARTESIA FRONTEND VOICE REQUEST STARTED"
+        "BOMBA 9JALINGO FRONTEND VOICE REQUEST STARTED"
       );
 
       const response = await fetch(
@@ -427,7 +428,7 @@ export default function StudioBoard() {
       );
 
       console.log(
-        "BOMBA CARTESIA FRONTEND VOICE STATUS:",
+        "BOMBA 9JALINGO FRONTEND VOICE STATUS:",
         response.status
       );
 
@@ -463,7 +464,7 @@ export default function StudioBoard() {
 
       if (!audioBuffer.byteLength) {
         throw new Error(
-          "Cartesia returned an empty audio file."
+          "9jaLingo returned an empty audio file."
         );
       }
 
@@ -489,13 +490,13 @@ export default function StudioBoard() {
       );
 
       console.log(
-        "BOMBA CARTESIA VOICE AUDIO READY:",
+        "BOMBA 9JALINGO VOICE AUDIO READY:",
         audioBuffer.byteLength,
         "bytes"
       );
     } catch (error) {
       console.error(
-        "BOMBA CARTESIA VOICE GENERATION ERROR:",
+        "BOMBA 9JALINGO VOICE GENERATION ERROR:",
         error
       );
 
@@ -843,7 +844,7 @@ export default function StudioBoard() {
               }}
             >
               Turn your dialogue into realistic
-              AI speech using Cartesia.
+              AI speech using 9jaLingo.
             </div>
 
             {/* LANGUAGE */}
@@ -880,16 +881,20 @@ export default function StudioBoard() {
                 fontSize: "10px",
               }}
             >
-              <option value="English">
-                English
-              </option>
-
-              <option value="Nigerian English">
-                Nigerian English
-              </option>
-
-              <option value="Nigerian Pidgin">
+              <option value="pcm">
                 Nigerian Pidgin
+              </option>
+
+              <option value="yo">
+                Yoruba
+              </option>
+
+              <option value="ig">
+                Igbo
+              </option>
+
+              <option value="ha">
+                Hausa
               </option>
             </select>
 
@@ -903,7 +908,7 @@ export default function StudioBoard() {
                 marginBottom: "5px",
               }}
             >
-              CARTESIA VOICE ID
+              9JALINGO VOICE ID
             </label>
 
             <input
@@ -914,7 +919,7 @@ export default function StudioBoard() {
                   event.target.value
                 )
               }
-              placeholder="Paste your Cartesia Voice ID here"
+              placeholder="e.g. ada_pcm"
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -1168,7 +1173,7 @@ export default function StudioBoard() {
               }}
             >
               Enter dialogue → choose language →
-              enter Cartesia voice → generate →
+              enter 9jaLingo voice → generate →
               preview → use in your video.
             </div>
           </div>
@@ -1182,7 +1187,7 @@ export default function StudioBoard() {
               opacity: 0.38,
             }}
           >
-            BOMBA Voice Studio — powered by Cartesia.
+            BOMBA Voice Studio — powered by 9jaLingo.
           </div>
         </div>
       )}
