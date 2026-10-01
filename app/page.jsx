@@ -234,6 +234,95 @@ export default function Home() {
     }
 
     return null;
+    };
+
+  /* =====================================================
+     FINALIZE VIDEO WITH BOMBA AI VOICE
+  ===================================================== */
+
+  const finalizeVideoWithVoice = async (generatedVideoUrl) => {
+    if (!generatedVideoUrl) {
+      return generatedVideoUrl;
+    }
+
+    let voicePublicId = "";
+
+    try {
+      voicePublicId =
+        localStorage.getItem(
+          "bomba_voice_public_id"
+        ) || "";
+    } catch (storageError) {
+      console.error(
+        "BOMBA VOICE STORAGE ERROR:",
+        storageError
+      );
+    }
+
+    if (!voicePublicId) {
+      console.log(
+        "BOMBA: No saved Cloudinary voice found. Keeping original video."
+      );
+
+      return generatedVideoUrl;
+    }
+
+    setStatus(
+      "Video ready. Adding your BOMBA AI voice... 🎙️"
+    );
+
+    console.log(
+      "BOMBA FINALIZE START:",
+      {
+        generatedVideoUrl,
+        voicePublicId,
+      }
+    );
+
+    const finalizeResponse = await fetch(
+      "/api/video/finalize",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          videoUrl: generatedVideoUrl,
+          voicePublicId: voicePublicId,
+        }),
+      }
+    );
+
+    const finalizeData =
+      await readJsonResponse(
+        finalizeResponse
+      );
+
+    console.log(
+      "BOMBA FINALIZE RESPONSE:",
+      finalizeData
+    );
+
+    if (
+      !finalizeResponse.ok ||
+      finalizeData?.status !== "completed" ||
+      !finalizeData?.videoUrl
+    ) {
+      throw new Error(
+        getSafeErrorMessage(
+          finalizeData,
+          "Unable to attach the BOMBA AI voice to the video."
+        )
+      );
+    }
+
+    console.log(
+      "BOMBA FINAL VIDEO READY:",
+      finalizeData.videoUrl
+    );
+
+    return finalizeData.videoUrl;
   };
 
   /* =====================================================
@@ -445,11 +534,18 @@ export default function Home() {
             pollingRef.current = null;
           }
 
-          setVideoUrl(
-            returnedVideoUrl
-          );
+          const finalVideoUrl =
+  await finalizeVideoWithVoice(
+    returnedVideoUrl
+  );
 
-          setStatus(
+setVideoUrl(
+  finalVideoUrl
+);
+
+setStatus(
+  "Video ready with BOMBA AI voice! 🎬🎙️"
+);
             "Video ready! 🎬"
           );
 
@@ -844,13 +940,18 @@ ${prompt}
             directVideoUrl
           );
 
-          setVideoUrl(
-            directVideoUrl
-          );
+          const finalVideoUrl =
+  await finalizeVideoWithVoice(
+    directVideoUrl
+  );
 
-          setStatus(
-            "Video ready! 🎬"
-          );
+setVideoUrl(
+  finalVideoUrl
+);
+
+setStatus(
+  "Video ready with BOMBA AI voice! 🎬🎙️"
+);
 
           setError("");
           setLoading(false);
