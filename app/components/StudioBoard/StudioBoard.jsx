@@ -21,6 +21,79 @@ const modules = [
 ];
 
 /* =========================================================
+   CLOUDINARY CONFIG
+========================================================= */
+
+const CLOUDINARY_CLOUD_NAME =
+  process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "";
+
+const CLOUDINARY_VOICE_PRESET =
+  process.env.NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
+  "bomba_voice";
+
+/* =========================================================
+   CLOUDINARY VOICE UPLOAD
+========================================================= */
+
+async function uploadVoiceToCloudinary(audioBlob) {
+  if (!CLOUDINARY_CLOUD_NAME) {
+    throw new Error(
+      "Cloudinary Cloud Name is not configured."
+    );
+  }
+
+  if (!CLOUDINARY_VOICE_PRESET) {
+    throw new Error(
+      "Cloudinary voice upload preset is not configured."
+    );
+  }
+
+  const uploadUrl =
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(
+      CLOUDINARY_CLOUD_NAME
+    )}/video/upload`;
+
+  const formData = new FormData();
+
+  formData.append("file", audioBlob, "bomba-voice.mp3");
+  formData.append(
+    "upload_preset",
+    CLOUDINARY_VOICE_PRESET
+  );
+
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    body: formData,
+  });
+
+  const text = await response.text();
+
+  let data = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message ||
+        data?.error ||
+        `Cloudinary voice upload failed with HTTP ${response.status}.`
+    );
+  }
+
+  if (!data?.public_id) {
+    throw new Error(
+      "Cloudinary uploaded the voice but did not return a public ID."
+    );
+  }
+
+  return data;
+}
+
+/* =========================================================
    STUDIO BOARD
 ========================================================= */
 
@@ -87,12 +160,8 @@ export default function StudioBoard() {
     return () => {
       stopGeneratedSound();
       stopGeneratedVoice();
-
-      if (generatedVoiceUrl) {
-        URL.revokeObjectURL(generatedVoiceUrl);
-      }
     };
-  }, [generatedVoiceUrl]);
+  }, []);
 
   /* =======================================================
      STOP GENERATED SOUND
@@ -103,7 +172,7 @@ export default function StudioBoard() {
       try {
         generatedAudioRef.current.pause();
         generatedAudioRef.current.currentTime = 0;
-      } catch (error) {
+      } catch {
         console.log(
           "Generated audio cleanup skipped."
         );
@@ -122,7 +191,7 @@ export default function StudioBoard() {
       try {
         generatedVoiceRef.current.pause();
         generatedVoiceRef.current.currentTime = 0;
-      } catch (error) {
+      } catch {
         console.log(
           "Generated voice cleanup skipped."
         );
@@ -134,6 +203,7 @@ export default function StudioBoard() {
 
   /* =======================================================
      GENERATE AI SOUND
+     EXISTING WORKING SYSTEM — UNCHANGED
   ======================================================= */
 
   async function generateAISound() {
@@ -162,10 +232,6 @@ export default function StudioBoard() {
     );
 
     try {
-      console.log(
-        "BOMBA AI SOUND REQUEST STARTED"
-      );
-
       const response = await fetch(
         "/api/sound/generate",
         {
@@ -182,17 +248,7 @@ export default function StudioBoard() {
         }
       );
 
-      console.log(
-        "BOMBA AI SOUND HTTP STATUS:",
-        response.status
-      );
-
       const text = await response.text();
-
-      console.log(
-        "BOMBA AI SOUND RAW RESPONSE:",
-        text
-      );
 
       let data = {};
 
@@ -200,16 +256,11 @@ export default function StudioBoard() {
         data = text
           ? JSON.parse(text)
           : {};
-      } catch (error) {
+      } catch {
         throw new Error(
           "Sound server returned an invalid response."
         );
       }
-
-      console.log(
-        "BOMBA AI SOUND RESPONSE:",
-        data
-      );
 
       if (!response.ok) {
         throw new Error(
@@ -240,13 +291,6 @@ export default function StudioBoard() {
         setGeneratedSoundStatus(
           "⏳ Sound is still processing. Generate again shortly."
         );
-
-        if (data?.predictionId) {
-          console.log(
-            "BOMBA SOUND PREDICTION:",
-            data.predictionId
-          );
-        }
 
         return;
       }
@@ -291,10 +335,6 @@ export default function StudioBoard() {
     stopGeneratedSound();
 
     try {
-      setGeneratedSoundStatus(
-        "⏳ Loading generated AI sound..."
-      );
-
       const audio =
         new Audio(generatedAudioUrl);
 
@@ -303,12 +343,6 @@ export default function StudioBoard() {
       generatedAudioRef.current =
         audio;
 
-      audio.onloadeddata = () => {
-        console.log(
-          "BOMBA GENERATED AUDIO LOADED"
-        );
-      };
-
       audio.onended = () => {
         setGeneratedSoundStatus(
           "🎵 AI sound finished. Ready again."
@@ -316,11 +350,6 @@ export default function StudioBoard() {
       };
 
       audio.onerror = () => {
-        console.error(
-          "BOMBA GENERATED AUDIO ERROR:",
-          audio.error
-        );
-
         setGeneratedSoundStatus(
           "❌ Generated audio could not be played."
         );
@@ -335,23 +364,13 @@ export default function StudioBoard() {
               "▶️ AI sound is playing."
             );
           })
-          .catch((error) => {
-            console.error(
-              "BOMBA GENERATED AUDIO PLAY ERROR:",
-              error
-            );
-
+          .catch(() => {
             setGeneratedSoundStatus(
               "❌ Browser blocked the generated audio."
             );
           });
       }
-    } catch (error) {
-      console.error(
-        "BOMBA GENERATED AUDIO ERROR:",
-        error
-      );
-
+    } catch {
       setGeneratedSoundStatus(
         "❌ Unable to play generated audio."
       );
@@ -392,12 +411,6 @@ export default function StudioBoard() {
 
     stopGeneratedVoice();
 
-    if (generatedVoiceUrl) {
-      URL.revokeObjectURL(
-        generatedVoiceUrl
-      );
-    }
-
     setGeneratedVoiceUrl("");
     setGeneratedVoiceError("");
     setIsGeneratingVoice(true);
@@ -407,9 +420,9 @@ export default function StudioBoard() {
     );
 
     try {
-      console.log(
-        "BOMBA 9JALINGO FRONTEND VOICE REQUEST STARTED"
-      );
+      /* ================================================
+         STEP 1 — 9JALINGO
+      ================================================= */
 
       const response = await fetch(
         "/api/voice/generate",
@@ -427,11 +440,6 @@ export default function StudioBoard() {
         }
       );
 
-      console.log(
-        "BOMBA 9JALINGO FRONTEND VOICE STATUS:",
-        response.status
-      );
-
       if (!response.ok) {
         const errorText =
           await response.text();
@@ -442,7 +450,7 @@ export default function StudioBoard() {
           errorData = errorText
             ? JSON.parse(errorText)
             : {};
-        } catch (error) {
+        } catch {
           errorData = {};
         }
 
@@ -453,11 +461,9 @@ export default function StudioBoard() {
         );
       }
 
-      /*
-       * IMPORTANT:
-       * /api/voice/generate returns RAW MP3 BYTES.
-       * It does NOT return JSON.
-       */
+      /* ================================================
+         STEP 2 — RECEIVE MP3
+      ================================================= */
 
       const audioBuffer =
         await response.arrayBuffer();
@@ -476,6 +482,10 @@ export default function StudioBoard() {
           }
         );
 
+      /* ================================================
+         STEP 3 — LOCAL PREVIEW
+      ================================================= */
+
       const audioUrl =
         URL.createObjectURL(
           audioBlob
@@ -485,14 +495,53 @@ export default function StudioBoard() {
         audioUrl
       );
 
+      /* ================================================
+         STEP 4 — AUTOMATIC CLOUDINARY UPLOAD
+      ================================================= */
+
       setGeneratedVoiceStatus(
-        "✅ AI voice created successfully. Press PLAY AI VOICE."
+        "☁️ Uploading your voice automatically..."
       );
 
+      const cloudinaryResult =
+        await uploadVoiceToCloudinary(
+          audioBlob
+        );
+
+      const voicePublicId =
+        cloudinaryResult.public_id;
+
       console.log(
-        "BOMBA 9JALINGO VOICE AUDIO READY:",
-        audioBuffer.byteLength,
-        "bytes"
+        "BOMBA CLOUDINARY VOICE READY:",
+        voicePublicId
+      );
+
+      /* ================================================
+         STEP 5 — SAVE VOICE ID FOR VIDEO PIPELINE
+      ================================================= */
+
+      localStorage.setItem(
+        "bomba_voice_public_id",
+        voicePublicId
+      );
+
+      localStorage.setItem(
+        "bomba_voice_cloudinary_resource_type",
+        "video"
+      );
+
+      localStorage.setItem(
+        "bomba_voice_language",
+        voiceLanguage
+      );
+
+      localStorage.setItem(
+        "bomba_voice_text",
+        cleanText
+      );
+
+      setGeneratedVoiceStatus(
+        "✅ AI voice ready. Your next video will automatically include this voice."
       );
     } catch (error) {
       console.error(
@@ -532,10 +581,6 @@ export default function StudioBoard() {
     stopGeneratedVoice();
 
     try {
-      setGeneratedVoiceStatus(
-        "⏳ Loading generated AI voice..."
-      );
-
       const audio =
         new Audio(
           generatedVoiceUrl
@@ -546,12 +591,6 @@ export default function StudioBoard() {
       generatedVoiceRef.current =
         audio;
 
-      audio.onloadeddata = () => {
-        console.log(
-          "BOMBA GENERATED VOICE LOADED"
-        );
-      };
-
       audio.onended = () => {
         setGeneratedVoiceStatus(
           "🎙️ AI voice finished. Ready again."
@@ -559,11 +598,6 @@ export default function StudioBoard() {
       };
 
       audio.onerror = () => {
-        console.error(
-          "BOMBA GENERATED VOICE ERROR:",
-          audio.error
-        );
-
         setGeneratedVoiceStatus(
           "❌ Generated voice could not be played."
         );
@@ -579,32 +613,22 @@ export default function StudioBoard() {
               "▶️ AI voice is playing."
             );
           })
-          .catch((error) => {
-            console.error(
-              "BOMBA GENERATED VOICE PLAY ERROR:",
-              error
-            );
-
+          .catch(() => {
             setGeneratedVoiceStatus(
               "❌ Browser blocked the generated voice."
             );
           });
       }
-    } catch (error) {
-      console.error(
-        "BOMBA GENERATED VOICE ERROR:",
-        error
-      );
-
+    } catch {
       setGeneratedVoiceStatus(
         "❌ Unable to play generated voice."
       );
     }
   }
 
-  /* =======================================================
+  /* =========================================================
      UI
-  ======================================================= */
+  ========================================================= */
 
   return (
     <section
@@ -618,13 +642,7 @@ export default function StudioBoard() {
           "rgba(255,255,255,0.025)",
       }}
     >
-      {/* HEADER */}
-
-      <div
-        style={{
-          marginBottom: "12px",
-        }}
-      >
+      <div style={{ marginBottom: "12px" }}>
         <div
           style={{
             fontSize: "11px",
@@ -656,8 +674,6 @@ export default function StudioBoard() {
           Build your video from idea to export.
         </p>
       </div>
-
-      {/* PRODUCTION MODULES */}
 
       <div
         style={{
@@ -708,11 +724,7 @@ export default function StudioBoard() {
                 {module.icon}
               </span>
 
-              <span
-                style={{
-                  minWidth: 0,
-                }}
-              >
+              <span style={{ minWidth: 0 }}>
                 <span
                   style={{
                     display: "block",
@@ -756,8 +768,6 @@ export default function StudioBoard() {
               "rgba(255,212,59,0.04)",
           }}
         >
-          {/* VOICE HEADER */}
-
           <div
             style={{
               display: "flex",
@@ -812,8 +822,6 @@ export default function StudioBoard() {
             </button>
           </div>
 
-          {/* VOICE GENERATOR */}
-
           <div
             style={{
               padding: "12px",
@@ -845,9 +853,9 @@ export default function StudioBoard() {
             >
               Turn your dialogue into realistic
               AI speech using 9jaLingo.
+              Your generated voice is automatically
+              prepared for the video pipeline.
             </div>
-
-            {/* LANGUAGE */}
 
             <label
               style={{
@@ -898,8 +906,6 @@ export default function StudioBoard() {
               </option>
             </select>
 
-            {/* VOICE ID */}
-
             <label
               style={{
                 display: "block",
@@ -935,8 +941,6 @@ export default function StudioBoard() {
                 outline: "none",
               }}
             />
-
-            {/* DIALOGUE */}
 
             <label
               style={{
@@ -987,16 +991,10 @@ export default function StudioBoard() {
               {voiceText.length} / 5000
             </div>
 
-            {/* GENERATE BUTTON */}
-
             <button
               type="button"
-              onClick={
-                generateAIVoice
-              }
-              disabled={
-                isGeneratingVoice
-              }
+              onClick={generateAIVoice}
+              disabled={isGeneratingVoice}
               style={{
                 width: "100%",
                 marginTop: "9px",
@@ -1024,8 +1022,6 @@ export default function StudioBoard() {
                 : "🎙️ GENERATE AI VOICE"}
             </button>
 
-            {/* STATUS */}
-
             <div
               style={{
                 marginTop: "10px",
@@ -1040,8 +1036,6 @@ export default function StudioBoard() {
             >
               {generatedVoiceStatus}
             </div>
-
-            {/* ERROR */}
 
             {generatedVoiceError && (
               <div
@@ -1061,8 +1055,6 @@ export default function StudioBoard() {
                 {generatedVoiceError}
               </div>
             )}
-
-            {/* GENERATED VOICE */}
 
             {generatedVoiceUrl && (
               <div
@@ -1142,8 +1134,6 @@ export default function StudioBoard() {
             )}
           </div>
 
-          {/* VOICE WORKFLOW */}
-
           <div
             style={{
               marginTop: "12px",
@@ -1173,8 +1163,8 @@ export default function StudioBoard() {
               }}
             >
               Enter dialogue → choose language →
-              enter 9jaLingo voice → generate →
-              preview → use in your video.
+              choose voice → generate → automatic
+              Cloudinary upload → ready for your video.
             </div>
           </div>
 
@@ -1208,8 +1198,6 @@ export default function StudioBoard() {
               "rgba(255,212,59,0.04)",
           }}
         >
-          {/* SOUND HEADER */}
-
           <div
             style={{
               display: "flex",
@@ -1264,8 +1252,6 @@ export default function StudioBoard() {
             </button>
           </div>
 
-          {/* AI SOUND GENERATOR */}
-
           <div
             style={{
               padding: "12px",
@@ -1299,8 +1285,6 @@ export default function StudioBoard() {
               from your own description.
             </div>
 
-            {/* PROMPT */}
-
             <textarea
               value={soundPrompt}
               onChange={(event) =>
@@ -1326,8 +1310,6 @@ export default function StudioBoard() {
                 outline: "none",
               }}
             />
-
-            {/* CONTROLS */}
 
             <div
               style={{
@@ -1357,39 +1339,18 @@ export default function StudioBoard() {
                   fontSize: "10px",
                 }}
               >
-                <option value={5}>
-                  5 seconds
-                </option>
-
-                <option value={8}>
-                  8 seconds
-                </option>
-
-                <option value={10}>
-                  10 seconds
-                </option>
-
-                <option value={15}>
-                  15 seconds
-                </option>
-
-                <option value={20}>
-                  20 seconds
-                </option>
-
-                <option value={30}>
-                  30 seconds
-                </option>
+                <option value={5}>5 seconds</option>
+                <option value={8}>8 seconds</option>
+                <option value={10}>10 seconds</option>
+                <option value={15}>15 seconds</option>
+                <option value={20}>20 seconds</option>
+                <option value={30}>30 seconds</option>
               </select>
 
               <button
                 type="button"
-                onClick={
-                  generateAISound
-                }
-                disabled={
-                  isGeneratingSound
-                }
+                onClick={generateAISound}
+                disabled={isGeneratingSound}
                 style={{
                   flex: 2,
                   padding: "10px",
@@ -1417,8 +1378,6 @@ export default function StudioBoard() {
               </button>
             </div>
 
-            {/* STATUS */}
-
             <div
               style={{
                 marginTop: "10px",
@@ -1433,8 +1392,6 @@ export default function StudioBoard() {
             >
               {generatedSoundStatus}
             </div>
-
-            {/* ERROR */}
 
             {generatedSoundError && (
               <div
@@ -1454,8 +1411,6 @@ export default function StudioBoard() {
                 {generatedSoundError}
               </div>
             )}
-
-            {/* GENERATED AUDIO */}
 
             {generatedAudioUrl && (
               <div
@@ -1535,8 +1490,6 @@ export default function StudioBoard() {
             )}
           </div>
 
-          {/* SIMPLE SOUND INFO */}
-
           <div
             style={{
               marginTop: "12px",
@@ -1570,8 +1523,6 @@ export default function StudioBoard() {
               video project.
             </div>
           </div>
-
-          {/* FOOTER */}
 
           <div
             style={{
