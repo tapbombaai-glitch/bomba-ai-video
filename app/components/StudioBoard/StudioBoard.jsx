@@ -297,12 +297,6 @@ function createTestStoryFromIdea(idea) {
 
 /* =========================================================
    VOICE SLOT ASSIGNMENT
-
-   The architecture supports any number of characters.
-
-   Confirmed provider voices are assigned only once.
-   Extra characters receive reserved voice slots until
-   additional real provider voices are confirmed.
 ========================================================= */
 
 function assignCharacterVoices(characters, language) {
@@ -334,6 +328,309 @@ function assignCharacterVoices(characters, language) {
       },
     };
   });
+}
+
+/* =========================================================
+   BOMBA TEST DIALOGUE ENGINE
+   No OpenAI call.
+
+   This creates structured dialogue from:
+   STORY + CHARACTERS + SCENES.
+
+   Each dialogue line carries:
+   - scene
+   - character
+   - voice assignment
+   - language
+   - estimated duration
+========================================================= */
+
+function createTestDialogueFromStory(
+  story,
+  characters,
+  language
+) {
+  if (!story) {
+    throw new Error(
+      "Story is required before building dialogue."
+    );
+  }
+
+  if (!characters?.length) {
+    throw new Error(
+      "Characters are required before building dialogue."
+    );
+  }
+
+  const characterMap = {};
+
+  for (const character of characters) {
+    characterMap[character.name] =
+      character;
+  }
+
+  const getCharacter = (name) => {
+    const character =
+      characterMap[name];
+
+    if (!character) {
+      throw new Error(
+        `Character "${name}" was not found.`
+      );
+    }
+
+    return character;
+  };
+
+  const createLine = (
+    sceneNumber,
+    lineNumber,
+    characterName,
+    text,
+    emotion = "natural"
+  ) => {
+    const character =
+      getCharacter(characterName);
+
+    const wordCount =
+      text
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length;
+
+    const durationEstimateSec =
+      Math.max(
+        1,
+        Number(
+          (wordCount / 2.5).toFixed(1)
+        )
+      );
+
+    return {
+      id: `dialogue-${sceneNumber}-${lineNumber}`,
+      sceneNumber,
+      lineNumber,
+      characterId: character.id,
+      characterName: character.name,
+      role: character.role,
+      text,
+      language,
+      emotion,
+      voice: {
+        slot:
+          character.voice?.slot ||
+          character.voiceSlot ||
+          null,
+        voiceId:
+          character.voice?.voiceId ||
+          null,
+        voiceName:
+          character.voice?.voiceName ||
+          null,
+        status:
+          character.voice?.status ||
+          "reserved",
+      },
+      timing: {
+        durationEstimateSec,
+      },
+      audio: {
+        status: "pending",
+        url: null,
+        publicId: null,
+      },
+    };
+  };
+
+  const dialogue = [
+    createLine(
+      1,
+      1,
+      "Daniel",
+      "I don think say this idea fit work, but I no wan give up.",
+      "determined"
+    ),
+    createLine(
+      1,
+      2,
+      "Sarah",
+      "Then make you start small. You no need everything before you begin.",
+      "encouraging"
+    ),
+    createLine(
+      1,
+      3,
+      "Daniel",
+      "Na true. If I no start now, I fit regret am later.",
+      "hopeful"
+    ),
+
+    createLine(
+      2,
+      1,
+      "Daniel",
+      "This thing harder pass wetin I expect.",
+      "worried"
+    ),
+    createLine(
+      2,
+      2,
+      "Michael",
+      "I tell you. Big dreams need more than just talking.",
+      "challenging"
+    ),
+    createLine(
+      2,
+      3,
+      "Daniel",
+      "Maybe. But I still believe say we fit make am work.",
+      "determined"
+    ),
+
+    createLine(
+      3,
+      1,
+      "Daniel",
+      "Make we sit down and find another way forward.",
+      "focused"
+    ),
+    createLine(
+      3,
+      2,
+      "Sarah",
+      "I fit help with the plan. We just need everybody to cooperate.",
+      "supportive"
+    ),
+    createLine(
+      3,
+      3,
+      "Michael",
+      "Maybe I too dey look at this thing from only my own side.",
+      "reflective"
+    ),
+    createLine(
+      3,
+      4,
+      "Amara",
+      "Then make we work together. That one fit change everything.",
+      "optimistic"
+    ),
+
+    createLine(
+      4,
+      1,
+      "Chief Okoro",
+      "Young people, sometimes the biggest problem no be lack of money. Na fear.",
+      "wise"
+    ),
+    createLine(
+      4,
+      2,
+      "Daniel",
+      "So you think say we should continue?",
+      "uncertain"
+    ),
+    createLine(
+      4,
+      3,
+      "Chief Okoro",
+      "If the purpose is good, take the next step and learn as you go.",
+      "encouraging"
+    ),
+
+    createLine(
+      5,
+      1,
+      "Daniel",
+      "Okay. This time, we move together.",
+      "confident"
+    ),
+    createLine(
+      5,
+      2,
+      "Sarah",
+      "Yes. No more waiting.",
+      "determined"
+    ),
+    createLine(
+      5,
+      3,
+      "Amara",
+      "Everybody ready?",
+      "excited"
+    ),
+    createLine(
+      5,
+      4,
+      "Daniel",
+      "Let's do am.",
+      "confident"
+    ),
+  ];
+
+  const scenes = story.scenes || [];
+
+  const sceneDialogue = scenes.map(
+    (scene) => {
+      const lines =
+        dialogue.filter(
+          (line) =>
+            Number(line.sceneNumber) ===
+            Number(scene.sceneNumber)
+        );
+
+      const totalDuration =
+        lines.reduce(
+          (total, line) =>
+            total +
+            Number(
+              line.timing
+                ?.durationEstimateSec ||
+                0
+            ),
+          0
+        );
+
+      return {
+        sceneNumber:
+          scene.sceneNumber,
+        title: scene.title,
+        location: scene.location,
+        time: scene.time,
+        lines,
+        estimatedDialogueDurationSec:
+          Number(
+            totalDuration.toFixed(1)
+          ),
+      };
+    }
+  );
+
+  const totalDuration =
+    dialogue.reduce(
+      (total, line) =>
+        total +
+        Number(
+          line.timing
+            ?.durationEstimateSec ||
+            0
+        ),
+      0
+    );
+
+  return {
+    mode: "test",
+    language,
+    storyId: story.id,
+    title: story.title,
+    lines: dialogue,
+    scenes: sceneDialogue,
+    totalLines: dialogue.length,
+    estimatedDurationSec:
+      Number(totalDuration.toFixed(1)),
+    createdAt:
+      new Date().toISOString(),
+  };
 }
 
 export default function StudioBoard() {
@@ -393,6 +690,21 @@ export default function StudioBoard() {
 
   const [selectedSceneNumber, setSelectedSceneNumber] =
     useState(1);
+
+  /* =======================================================
+     DIALOGUE
+  ======================================================= */
+
+  const [dialogueStatus, setDialogueStatus] =
+    useState(
+      "Build the STORY and CHARACTERS first. BOMBA will prepare the dialogue."
+    );
+
+  const [selectedDialogueScene, setSelectedDialogueScene] =
+    useState(1);
+
+  const [isBuildingDialogue, setIsBuildingDialogue] =
+    useState(false);
 
   /* =======================================================
      SOUND
@@ -608,7 +920,12 @@ export default function StudioBoard() {
         `🟡 SCENE PLAN READY. ${story.scenes?.length || 0} scenes and ${story.shots?.length || 0} shots are available from the STORY.`
       );
 
+      setDialogueStatus(
+        "💬 STORY and CHARACTERS are ready. Dialogue can now be built."
+      );
+
       setSelectedSceneNumber(1);
+      setSelectedDialogueScene(1);
     } catch (error) {
       console.error(
         "BOMBA TEST STORY ERROR:",
@@ -623,6 +940,93 @@ export default function StudioBoard() {
       );
     } finally {
       setIsBuildingStory(false);
+    }
+  }
+
+  /* =======================================================
+     BUILD DIALOGUE — TEST MODE
+  ======================================================= */
+
+  function buildTestDialogue() {
+    const currentStory =
+      production?.story?.data?.plan ||
+      null;
+
+    const currentCharacters =
+      production?.characters?.data
+        ?.characters || [];
+
+    if (!currentStory) {
+      setDialogueStatus(
+        "⚠️ Build the STORY before creating dialogue."
+      );
+
+      return;
+    }
+
+    if (!currentCharacters.length) {
+      setDialogueStatus(
+        "⚠️ Build the CHARACTERS before creating dialogue."
+      );
+
+      return;
+    }
+
+    setIsBuildingDialogue(true);
+    setDialogueStatus(
+      "🧠 BOMBA is building structured dialogue from the STORY, CHARACTERS and SCENES..."
+    );
+
+    try {
+      const dialogue =
+        createTestDialogueFromStory(
+          currentStory,
+          currentCharacters,
+          characterLanguage
+        );
+
+      const nextProduction =
+        changeStage(
+          "dialogue",
+          {
+            mode: "test",
+            language:
+              characterLanguage,
+            plan: dialogue,
+            lines:
+              dialogue.lines,
+            scenes:
+              dialogue.scenes,
+            totalLines:
+              dialogue.totalLines,
+            estimatedDurationSec:
+              dialogue.estimatedDurationSec,
+          }
+        );
+
+      setProduction(
+        nextProduction
+      );
+
+      setDialogueStatus(
+        `✅ DIALOGUE READY. ${dialogue.totalLines} dialogue lines created across ${dialogue.scenes.length} scenes.`
+      );
+
+      setSelectedDialogueScene(1);
+    } catch (error) {
+      console.error(
+        "BOMBA TEST DIALOGUE ERROR:",
+        error
+      );
+
+      setDialogueStatus(
+        `❌ ${
+          error?.message ||
+          "Unable to build the test dialogue."
+        }`
+      );
+    } finally {
+      setIsBuildingDialogue(false);
     }
   }
 
@@ -1137,6 +1541,13 @@ export default function StudioBoard() {
   const shots =
     story?.shots || [];
 
+  const dialoguePlan =
+    production?.dialogue?.data?.plan ||
+    null;
+
+  const dialogueScenes =
+    dialoguePlan?.scenes || [];
+
   const selectedScene =
     scenes.find(
       (scene) =>
@@ -1154,6 +1565,15 @@ export default function StudioBoard() {
             )
         )
       : [];
+
+  const selectedDialogueSceneData =
+    dialogueScenes.find(
+      (scene) =>
+        Number(scene.sceneNumber) ===
+        Number(selectedDialogueScene)
+    ) ||
+    dialogueScenes[0] ||
+    null;
 
   function getModuleStatus(moduleName) {
     switch (moduleName) {
@@ -1186,6 +1606,24 @@ export default function StudioBoard() {
 
         return "waiting";
 
+      case "DIALOGUE":
+        if (
+          production?.dialogue?.status ===
+          "completed"
+        ) {
+          return "ready";
+        }
+
+        if (
+          production?.dialogue?.status ===
+          "ready" &&
+          dialoguePlan
+        ) {
+          return "ready";
+        }
+
+        return "waiting";
+
       case "VOICE":
         return availableVoices.length > 0
           ? "ready"
@@ -1196,7 +1634,6 @@ export default function StudioBoard() {
           ? "ready"
           : "waiting";
 
-      case "DIALOGUE":
       case "VIDEO":
       case "TIMELINE":
       case "PREVIEW":
@@ -2698,6 +3135,534 @@ export default function StudioBoard() {
                   )}
                 </div>
               )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* =====================================================
+          DIALOGUE SYSTEM
+      ===================================================== */}
+
+      {activeModule === "DIALOGUE" && (
+        <div
+          style={{
+            marginTop: "14px",
+            padding: "14px",
+            borderRadius: "12px",
+            border:
+              "1px solid rgba(255,212,59,0.20)",
+            background:
+              "rgba(255,212,59,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "700",
+                  letterSpacing: "1px",
+                  opacity: 0.55,
+                }}
+              >
+                DIALOGUE SYSTEM
+              </div>
+
+              <h3
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: "16px",
+                  fontWeight: "800",
+                }}
+              >
+                💬 DIALOGUE
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveModule(null)
+              }
+              style={{
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color: "inherit",
+                borderRadius: "8px",
+                padding: "6px 9px",
+                fontSize: "11px",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: "10px",
+              borderRadius: "9px",
+              background:
+                dialoguePlan
+                  ? "rgba(70,255,150,0.06)"
+                  : "rgba(255,255,255,0.035)",
+              border:
+                dialoguePlan
+                  ? "1px solid rgba(70,255,150,0.18)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              marginBottom: "10px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              {dialoguePlan
+                ? "🟢 DIALOGUE CONNECTED"
+                : "⚪ DIALOGUE WAITING"}
+            </div>
+
+            <div
+              style={{
+                fontSize: "8px",
+                opacity: 0.58,
+                lineHeight: 1.5,
+              }}
+            >
+              {dialoguePlan
+                ? `${dialoguePlan.totalLines || 0} dialogue lines are connected to ${dialogueScenes.length || 0} scenes.`
+                : "BOMBA will build structured dialogue from the STORY, CHARACTERS and SCENES."}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "10px",
+              borderRadius: "9px",
+              background:
+                "rgba(255,255,255,0.035)",
+              border:
+                "1px solid rgba(255,255,255,0.08)",
+              marginBottom: "10px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              🧪 TEST MODE
+            </div>
+
+            <div
+              style={{
+                fontSize: "8px",
+                opacity: 0.55,
+                lineHeight: 1.5,
+                marginBottom: "9px",
+              }}
+            >
+              No OpenAI call is required yet. This
+              test creates structured dialogue so the
+              next VOICE module can consume real
+              character dialogue automatically.
+            </div>
+
+            <div
+              style={{
+                padding: "8px",
+                borderRadius: "7px",
+                background:
+                  "rgba(0,0,0,0.20)",
+                fontSize: "8px",
+                lineHeight: 1.5,
+                marginBottom: "8px",
+              }}
+            >
+              <strong>Story:</strong>{" "}
+              {story?.title ||
+                "No story available."}
+              <br />
+              <strong>Characters:</strong>{" "}
+              {characters.length}
+              <br />
+              <strong>Scenes:</strong>{" "}
+              {scenes.length}
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                buildTestDialogue
+              }
+              disabled={
+                isBuildingDialogue ||
+                !story ||
+                !characters.length
+              }
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: "8px",
+                border:
+                  "1px solid rgba(255,212,59,0.45)",
+                background:
+                  "rgba(255,212,59,0.15)",
+                color: "inherit",
+                fontSize: "10px",
+                fontWeight: "800",
+                cursor:
+                  isBuildingDialogue
+                    ? "wait"
+                    : "pointer",
+                opacity:
+                  isBuildingDialogue ||
+                  !story ||
+                  !characters.length
+                    ? 0.5
+                    : 1,
+              }}
+            >
+              {isBuildingDialogue
+                ? "⏳ BUILDING DIALOGUE..."
+                : "💬 BUILD TEST DIALOGUE"}
+            </button>
+
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "9px",
+                borderRadius: "8px",
+                background:
+                  "rgba(0,0,0,0.20)",
+                fontSize: "9px",
+                lineHeight: 1.5,
+                textAlign: "center",
+              }}
+            >
+              {dialogueStatus}
+            </div>
+          </div>
+
+          {dialoguePlan && (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(2, minmax(0, 1fr))",
+                  gap: "7px",
+                  marginBottom: "10px",
+                }}
+              >
+                {dialogueScenes.map(
+                  (scene) => {
+                    const active =
+                      Number(
+                        selectedDialogueScene
+                      ) ===
+                      Number(
+                        scene.sceneNumber
+                      );
+
+                    return (
+                      <button
+                        key={
+                          scene.sceneNumber
+                        }
+                        type="button"
+                        onClick={() =>
+                          setSelectedDialogueScene(
+                            scene.sceneNumber
+                          )
+                        }
+                        style={{
+                          padding: "9px",
+                          borderRadius: "8px",
+                          border: active
+                            ? "1px solid rgba(255,212,59,0.55)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                          background: active
+                            ? "rgba(255,212,59,0.10)"
+                            : "rgba(255,255,255,0.035)",
+                          color: "inherit",
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "8px",
+                            opacity: 0.5,
+                            marginBottom: "3px",
+                          }}
+                        >
+                          SCENE{" "}
+                          {scene.sceneNumber}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "800",
+                          }}
+                        >
+                          {scene.title}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            fontSize: "7px",
+                            opacity: 0.5,
+                          }}
+                        >
+                          {scene.lines?.length ||
+                            0}{" "}
+                          lines
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              {selectedDialogueSceneData && (
+                <div
+                  style={{
+                    padding: "12px",
+                    borderRadius: "10px",
+                    background:
+                      "rgba(255,255,255,0.035)",
+                    border:
+                      "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent:
+                        "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: "8px",
+                          opacity: 0.5,
+                          marginBottom: "3px",
+                        }}
+                      >
+                        SCENE{" "}
+                        {
+                          selectedDialogueSceneData.sceneNumber
+                        }
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "15px",
+                          fontWeight: "800",
+                        }}
+                      >
+                        {
+                          selectedDialogueSceneData.title
+                        }
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "4px 7px",
+                        borderRadius: "6px",
+                        background:
+                          "rgba(70,255,150,0.08)",
+                        border:
+                          "1px solid rgba(70,255,150,0.18)",
+                        fontSize: "7px",
+                        fontWeight: "800",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      🟢 READY
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "9px",
+                      padding: "8px",
+                      borderRadius: "7px",
+                      background:
+                        "rgba(0,0,0,0.20)",
+                      fontSize: "8px",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong>Language:</strong>{" "}
+                    {dialoguePlan.language}
+                    <br />
+                    <strong>Estimated dialogue:</strong>{" "}
+                    {
+                      selectedDialogueSceneData.estimatedDialogueDurationSec
+                    }
+                    s
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      marginTop: "10px",
+                    }}
+                  >
+                    {(
+                      selectedDialogueSceneData.lines ||
+                      []
+                    ).map(
+                      (line) => (
+                        <div
+                          key={
+                            line.id
+                          }
+                          style={{
+                            padding: "10px",
+                            borderRadius: "8px",
+                            background:
+                              "rgba(0,0,0,0.20)",
+                            border:
+                              "1px solid rgba(255,255,255,0.07)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent:
+                                "space-between",
+                              gap: "8px",
+                            }}
+                          >
+                            <div>
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: "800",
+                                }}
+                              >
+                                {line.characterName}
+                              </div>
+
+                              <div
+                                style={{
+                                  marginTop: "2px",
+                                  fontSize: "7px",
+                                  opacity: 0.45,
+                                }}
+                              >
+                                {line.role}
+                                {" • "}
+                                {line.emotion}
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: "7px",
+                                color:
+                                  line.voice
+                                    ?.status ===
+                                  "ready"
+                                    ? "rgba(70,255,150,0.85)"
+                                    : "rgba(255,212,59,0.85)",
+                                fontWeight: "800",
+                                textAlign:
+                                  "right",
+                              }}
+                            >
+                              🎙️{" "}
+                              {line.voice
+                                ?.voiceName ||
+                                "Reserved Voice"}
+                              <br />
+                              {line.voice
+                                ?.voiceId ||
+                                line.voice
+                                  ?.slot ||
+                                "Pending"}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              fontSize: "10px",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            “{line.text}”
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "7px",
+                              fontSize: "7px",
+                              opacity: 0.45,
+                            }}
+                          >
+                            ⏱️ Estimated{" "}
+                            {
+                              line.timing
+                                ?.durationEstimateSec
+                            }
+                            s
+                            {" • "}
+                            {line.language}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div
+                style={{
+                  marginTop: "10px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background:
+                    "rgba(255,212,59,0.045)",
+                  border:
+                    "1px solid rgba(255,212,59,0.10)",
+                  fontSize: "8px",
+                  lineHeight: 1.5,
+                  opacity: 0.7,
+                }}
+              >
+                🧠 Production Brain now has structured
+                dialogue. The next VOICE module can use
+                each character's dialogue and voice
+                assignment instead of asking the user to
+                paste the script manually.
+              </div>
             </>
           )}
         </div>
