@@ -6,6 +6,7 @@ import {
   initializeProduction,
   getProduction,
   subscribeToProduction,
+  changeStage,
 } from "../../../lib/bomba/productionStore";
 
 const modules = [
@@ -104,6 +105,16 @@ export default function StudioBoard() {
 
   const [production, setProduction] = useState(null);
 
+  /* =======================================================
+     IDEA
+  ======================================================= */
+
+  const [ideaText, setIdeaText] = useState("");
+  const [ideaStatus, setIdeaStatus] = useState(
+    "Describe your movie, video, ad or story idea."
+  );
+  const ideaInitializedRef = useRef(false);
+
   useEffect(() => {
     let currentProduction = getProduction();
 
@@ -113,6 +124,17 @@ export default function StudioBoard() {
 
     setProduction(currentProduction);
 
+    if (!ideaInitializedRef.current) {
+      const savedIdea =
+        currentProduction?.idea?.data?.prompt || "";
+
+      if (savedIdea) {
+        setIdeaText(savedIdea);
+      }
+
+      ideaInitializedRef.current = true;
+    }
+
     const unsubscribe = subscribeToProduction(
       (nextProduction) => {
         setProduction(nextProduction);
@@ -121,6 +143,45 @@ export default function StudioBoard() {
 
     return unsubscribe;
   }, []);
+
+  function saveIdeaToProduction() {
+    const cleanIdea = ideaText.trim();
+
+    if (!cleanIdea) {
+      setIdeaStatus(
+        "⚠️ Enter your video idea first."
+      );
+
+      return;
+    }
+
+    try {
+      const nextProduction = changeStage(
+        "idea",
+        {
+          prompt: cleanIdea,
+        }
+      );
+
+      setProduction(nextProduction);
+
+      setIdeaStatus(
+        "✅ IDEA SAVED TO BOMBA. STORY is now the next production stage."
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA IDEA SAVE ERROR:",
+        error
+      );
+
+      setIdeaStatus(
+        `❌ ${
+          error?.message ||
+          "Unable to save your idea."
+        }`
+      );
+    }
+  }
 
   /* =======================================================
      SOUND
@@ -809,6 +870,386 @@ export default function StudioBoard() {
           )
         )}
       </div>
+
+      {/* =====================================================
+          IDEA STUDIO
+      ===================================================== */}
+
+      {activeModule ===
+        "IDEA" && (
+        <div
+          style={{
+            marginTop:
+              "14px",
+            padding:
+              "14px",
+            borderRadius:
+              "12px",
+            border:
+              "1px solid rgba(255,212,59,0.20)",
+            background:
+              "rgba(255,212,59,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display:
+                "flex",
+              alignItems:
+                "center",
+              justifyContent:
+                "space-between",
+              gap:
+                "10px",
+              marginBottom:
+                "12px",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize:
+                    "10px",
+                  fontWeight:
+                    "700",
+                  letterSpacing:
+                    "1px",
+                  opacity:
+                    0.55,
+                }}
+              >
+                PRODUCTION START
+              </div>
+
+              <h3
+                style={{
+                  margin:
+                    "4px 0 0",
+                  fontSize:
+                    "16px",
+                  fontWeight:
+                    "800",
+                }}
+              >
+                💡 Your Video Idea
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveModule(
+                  null
+                )
+              }
+              style={{
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color:
+                  "inherit",
+                borderRadius:
+                  "8px",
+                padding:
+                  "6px 9px",
+                fontSize:
+                  "11px",
+                cursor:
+                  "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding:
+                "12px",
+              borderRadius:
+                "10px",
+              border:
+                "1px solid rgba(255,212,59,0.30)",
+              background:
+                "rgba(255,212,59,0.07)",
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                letterSpacing:
+                  "1px",
+                marginBottom:
+                  "5px",
+              }}
+            >
+              🧠 BOMBA DIRECTOR
+            </div>
+
+            <div
+              style={{
+                fontSize:
+                  "9px",
+                opacity:
+                  0.58,
+                lineHeight:
+                  1.5,
+                marginBottom:
+                  "10px",
+              }}
+            >
+              Start with one idea. BOMBA will
+              keep this idea as the foundation
+              of the production.
+            </div>
+
+            <label
+              style={{
+                display:
+                  "block",
+                fontSize:
+                  "9px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
+              }}
+            >
+              DESCRIBE YOUR VIDEO IDEA
+            </label>
+
+            <textarea
+              value={
+                ideaText
+              }
+              onChange={(
+                event
+              ) => {
+                setIdeaText(
+                  event.target.value
+                );
+
+                if (
+                  ideaStatus.startsWith(
+                    "❌"
+                  ) ||
+                  ideaStatus.startsWith(
+                    "⚠️"
+                  )
+                ) {
+                  setIdeaStatus(
+                    "Describe your movie, video, ad or story idea."
+                  );
+                }
+              }}
+              rows={7}
+              maxLength={10000}
+              placeholder="Example: A young Nigerian entrepreneur starts a tech company from a small room in Lagos and faces one major challenge..."
+              style={{
+                width:
+                  "100%",
+                boxSizing:
+                  "border-box",
+                resize:
+                  "vertical",
+                padding:
+                  "10px",
+                borderRadius:
+                  "8px",
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(0,0,0,0.25)",
+                color:
+                  "inherit",
+                fontSize:
+                  "11px",
+                lineHeight:
+                  1.5,
+                outline:
+                  "none",
+              }}
+            />
+
+            <div
+              style={{
+                marginTop:
+                  "5px",
+                textAlign:
+                  "right",
+                fontSize:
+                  "8px",
+                opacity:
+                  0.4,
+              }}
+            >
+              {
+                ideaText.length
+              } / 10000
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                saveIdeaToProduction
+              }
+              disabled={
+                !ideaText.trim()
+              }
+              style={{
+                width:
+                  "100%",
+                marginTop:
+                  "9px",
+                padding:
+                  "12px",
+                borderRadius:
+                  "8px",
+                border:
+                  "1px solid rgba(255,212,59,0.45)",
+                background:
+                  "rgba(255,212,59,0.15)",
+                color:
+                  "inherit",
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                cursor:
+                  ideaText.trim()
+                    ? "pointer"
+                    : "not-allowed",
+                opacity:
+                  ideaText.trim()
+                    ? 1
+                    : 0.45,
+              }}
+            >
+              💡 SAVE IDEA TO BOMBA
+            </button>
+
+            <div
+              style={{
+                marginTop:
+                  "10px",
+                padding:
+                  "9px",
+                borderRadius:
+                  "8px",
+                background:
+                  "rgba(0,0,0,0.20)",
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.5,
+                textAlign:
+                  "center",
+              }}
+            >
+              {
+                ideaStatus
+              }
+            </div>
+
+            {production?.idea?.status ===
+              "ready" && (
+              <div
+                style={{
+                  marginTop:
+                    "10px",
+                  padding:
+                    "10px",
+                  borderRadius:
+                    "8px",
+                  background:
+                    "rgba(70,255,150,0.06)",
+                  border:
+                    "1px solid rgba(70,255,150,0.16)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize:
+                      "9px",
+                    fontWeight:
+                      "800",
+                    marginBottom:
+                      "5px",
+                  }}
+                >
+                  ✅ IDEA CONNECTED TO PRODUCTION BRAIN
+                </div>
+
+                <div
+                  style={{
+                    fontSize:
+                      "9px",
+                    opacity:
+                      0.6,
+                    lineHeight:
+                      1.5,
+                  }}
+                >
+                  BOMBA has the idea. The next
+                  production stage is{" "}
+                  <strong>
+                    STORY
+                  </strong>
+                  .
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              marginTop:
+                "12px",
+              padding:
+                "11px",
+              borderRadius:
+                "9px",
+              background:
+                "rgba(255,255,255,0.035)",
+              border:
+                "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  "10px",
+                fontWeight:
+                  "800",
+                marginBottom:
+                  "5px",
+              }}
+            >
+              🎬 PRODUCTION FLOW
+            </div>
+
+            <div
+              style={{
+                fontSize:
+                  "9px",
+                lineHeight:
+                  1.6,
+                opacity:
+                  0.55,
+              }}
+            >
+              IDEA → STORY → CHARACTERS →
+              DIALOGUE → VOICES → SCENES →
+              SHOTS → VIDEO → SOUND →
+              TIMELINE → PREVIEW → EXPORT
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           VOICE STUDIO
