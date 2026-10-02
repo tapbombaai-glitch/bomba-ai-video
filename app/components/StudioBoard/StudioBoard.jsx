@@ -6,7 +6,7 @@ import {
   initializeProduction,
   getProduction,
   subscribeToProduction,
-} from "../lib/bomba/productionStore";
+} from "../../../lib/bomba/productionStore";
 
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
