@@ -311,7 +311,7 @@ function assignCharacterVoices(characters, language) {
 
   return characters.map((character, index) => {
     const providerVoice =
-      providerVoices[index % providerVoices.length];
+  providerVoices[index] || null;
 
     return {
       ...character,
