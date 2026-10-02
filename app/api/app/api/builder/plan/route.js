@@ -5,171 +5,15 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const OPENAI_API_KEY =
-  process.env.OPENAI_API_KEY || "";
+const GROQ_API_KEY =
+  process.env.GROQ_API_KEY || "";
 
-const OPENAI_MODEL =
-  process.env.OPENAI_BUILDER_MODEL ||
-  "gpt-4.1-mini";
+const GROQ_MODEL =
+  process.env.GROQ_BUILDER_MODEL ||
+  "llama-3.3-70b-versatile";
 
-const OPENAI_URL =
-  "https://api.openai.com/v1/responses";
-
-const STORY_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    title: {
-      type: "string",
-    },
-    logline: {
-      type: "string",
-    },
-    genre: {
-      type: "string",
-    },
-    setting: {
-      type: "string",
-    },
-    beginning: {
-      type: "string",
-    },
-    middle: {
-      type: "string",
-    },
-    ending: {
-      type: "string",
-    },
-    conflict: {
-      type: "string",
-    },
-    turningPoint: {
-      type: "string",
-    },
-    themes: {
-      type: "array",
-      items: {
-        type: "string",
-      },
-    },
-    characters: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: {
-            type: "string",
-          },
-          role: {
-            type: "string",
-          },
-          description: {
-            type: "string",
-          },
-          goal: {
-            type: "string",
-          },
-          conflict: {
-            type: "string",
-          },
-        },
-        required: [
-          "name",
-          "role",
-          "description",
-          "goal",
-          "conflict",
-        ],
-      },
-    },
-    scenes: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          sceneNumber: {
-            type: "integer",
-          },
-          title: {
-            type: "string",
-          },
-          location: {
-            type: "string",
-          },
-          time: {
-            type: "string",
-          },
-          description: {
-            type: "string",
-          },
-          action: {
-            type: "string",
-          },
-          purpose: {
-            type: "string",
-          },
-        },
-        required: [
-          "sceneNumber",
-          "title",
-          "location",
-          "time",
-          "description",
-          "action",
-          "purpose",
-        ],
-      },
-    },
-    shots: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          shotNumber: {
-            type: "integer",
-          },
-          sceneNumber: {
-            type: "integer",
-          },
-          shotType: {
-            type: "string",
-          },
-          camera: {
-            type: "string",
-          },
-          description: {
-            type: "string",
-          },
-        },
-        required: [
-          "shotNumber",
-          "sceneNumber",
-          "shotType",
-          "camera",
-          "description",
-        ],
-      },
-    },
-  },
-  required: [
-    "title",
-    "logline",
-    "genre",
-    "setting",
-    "beginning",
-    "middle",
-    "ending",
-    "conflict",
-    "turningPoint",
-    "themes",
-    "characters",
-    "scenes",
-    "shots",
-  ],
-};
+const GROQ_URL =
+  "https://api.groq.com/openai/v1/chat/completions";
 
 export async function POST(request) {
   try {
@@ -203,33 +47,41 @@ export async function POST(request) {
     }
 
     /*
-     * Keep this route safe while OpenAI billing/credits
-     * are unavailable.
+     * GROQ API KEY CHECK
      *
-     * The route is ready for the real AI connection,
-     * but it must never pretend a story was generated.
+     * The actual secret stays inside the
+     * server environment as GROQ_API_KEY.
      */
-    if (!OPENAI_API_KEY) {
+    if (!GROQ_API_KEY) {
       return NextResponse.json(
         {
           status: "waiting_for_ai",
-          code: "OPENAI_API_KEY_MISSING",
+          code: "GROQ_API_KEY_MISSING",
           error:
-            "BOMBA Story Engine is ready, but OPENAI_API_KEY is not configured.",
+            "BOMBA Story Engine is ready, but GROQ_API_KEY is not configured.",
         },
         { status: 503 }
       );
     }
 
+    /*
+     * BOMBA STORY ENGINE
+     *
+     * Groq JSON Object Mode is used here because
+     * llama-3.3-70b-versatile supports JSON Object Mode.
+     *
+     * The prompt explicitly defines the JSON structure
+     * that BOMBA expects.
+     */
     const systemPrompt = `
 You are BOMBA AI Director, the production brain of a professional
 AI video studio.
 
-Your job is to turn one video idea into a production-ready story plan.
+Your job is to turn ONE video idea into a production-ready story plan.
 
 Think like a film director, screenwriter and AI video production planner.
 
-The result must be practical for later stages:
+The production pipeline is:
 
 IDEA
 → STORY
@@ -244,7 +96,7 @@ IDEA
 → PREVIEW
 → EXPORT
 
-Important rules:
+IMPORTANT RULES:
 
 1. Preserve the user's core idea.
 2. Do not replace the user's concept with an unrelated story.
@@ -254,64 +106,113 @@ Important rules:
 6. Create useful camera directions for later AI video generation.
 7. Do not generate dialogue yet.
 8. Do not generate voice instructions yet.
-9. Do not generate actual video prompts for external video APIs yet.
+9. Do not generate actual external video API prompts yet.
 10. Do not invent personal facts about the user.
 11. If the idea is Nigerian or African, preserve the requested cultural setting naturally.
-12. Return only the requested structured JSON.
+12. Return ONLY valid JSON.
+13. Do not use Markdown.
+14. Do not wrap the JSON in code fences.
+
+RETURN THIS EXACT JSON SHAPE:
+
+{
+  "title": "string",
+  "logline": "string",
+  "genre": "string",
+  "setting": "string",
+  "beginning": "string",
+  "middle": "string",
+  "ending": "string",
+  "conflict": "string",
+  "turningPoint": "string",
+  "themes": [
+    "string"
+  ],
+  "characters": [
+    {
+      "name": "string",
+      "role": "string",
+      "description": "string",
+      "goal": "string",
+      "conflict": "string"
+    }
+  ],
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "string",
+      "location": "string",
+      "time": "string",
+      "description": "string",
+      "action": "string",
+      "purpose": "string"
+    }
+  ],
+  "shots": [
+    {
+      "shotNumber": 1,
+      "sceneNumber": 1,
+      "shotType": "string",
+      "camera": "string",
+      "description": "string"
+    }
+  ]
+}
+
+The JSON must contain all of these fields.
+
+Create practical cinematic content that can later be passed
+to BOMBA's dialogue, voice, scene, shot and video stages.
 `;
 
     const userPrompt = `
-Create a BOMBA production story plan from this idea:
+Create a BOMBA production story plan from this video idea:
 
 ${idea}
+
+Remember:
+Return ONLY valid JSON matching the required BOMBA structure.
 `;
 
-    const openAIResponse =
-      await fetch(OPENAI_URL, {
+    const groqResponse = await fetch(
+      GROQ_URL,
+      {
         method: "POST",
+
         headers: {
           Authorization:
-            `Bearer ${OPENAI_API_KEY}`,
+            `Bearer ${GROQ_API_KEY}`,
           "Content-Type":
             "application/json",
         },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
 
-          input: [
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+
+          messages: [
             {
               role: "system",
-              content: [
-                {
-                  type: "input_text",
-                  text: systemPrompt,
-                },
-              ],
+              content: systemPrompt,
             },
             {
               role: "user",
-              content: [
-                {
-                  type: "input_text",
-                  text: userPrompt,
-                },
-              ],
+              content: userPrompt,
             },
           ],
 
-          text: {
-            format: {
-              type: "json_schema",
-              name: "bomba_story_plan",
-              strict: true,
-              schema: STORY_SCHEMA,
-            },
+          response_format: {
+            type: "json_object",
           },
+
+          temperature: 0.7,
+
+          max_tokens: 12000,
         }),
-      });
+      }
+    );
 
     const responseText =
-      await openAIResponse.text();
+      await groqResponse.text();
 
     let responseData = {};
 
@@ -324,36 +225,39 @@ ${idea}
       responseData = {};
     }
 
-    if (!openAIResponse.ok) {
+    if (!groqResponse.ok) {
       console.error(
-        "BOMBA OPENAI STORY ENGINE ERROR:",
-        responseText.slice(0, 2000)
+        "BOMBA GROQ STORY ENGINE ERROR:",
+        responseText.slice(0, 3000)
       );
 
-      const openAIError =
+      const groqError =
         responseData?.error?.message ||
         responseData?.error ||
         responseText ||
-        `OpenAI request failed with HTTP ${openAIResponse.status}.`;
+        `Groq request failed with HTTP ${groqResponse.status}.`;
 
       return NextResponse.json(
         {
           status:
-            openAIResponse.status === 402 ||
-            openAIResponse.status === 429
+            groqResponse.status === 401 ||
+            groqResponse.status === 429
               ? "waiting_for_ai"
               : "failed",
+
           code:
-            openAIResponse.status === 402 ||
-            openAIResponse.status === 429
-              ? "OPENAI_BILLING_OR_LIMIT"
-              : "OPENAI_REQUEST_FAILED",
-          error: openAIError,
+            groqResponse.status === 401
+              ? "GROQ_AUTH_FAILED"
+              : groqResponse.status === 429
+              ? "GROQ_RATE_LIMIT"
+              : "GROQ_REQUEST_FAILED",
+
+          error: groqError,
         },
         {
           status:
-            openAIResponse.status === 402 ||
-            openAIResponse.status === 429
+            groqResponse.status === 401 ||
+            groqResponse.status === 429
               ? 503
               : 502,
         }
@@ -361,17 +265,17 @@ ${idea}
     }
 
     const storyText =
-      responseData?.output_text;
+      responseData?.choices?.[0]?.message?.content;
 
     if (
       typeof storyText !== "string" ||
       !storyText.trim()
     ) {
       console.error(
-        "BOMBA OPENAI STORY ENGINE RETURNED NO OUTPUT:",
+        "BOMBA GROQ STORY ENGINE RETURNED NO OUTPUT:",
         JSON.stringify(responseData).slice(
           0,
-          3000
+          4000
         )
       );
 
@@ -379,7 +283,7 @@ ${idea}
         {
           status: "failed",
           error:
-            "OpenAI returned no story plan.",
+            "Groq returned no story plan.",
         },
         { status: 502 }
       );
@@ -393,15 +297,61 @@ ${idea}
       );
     } catch {
       console.error(
-        "BOMBA STORY JSON PARSE ERROR:",
-        storyText.slice(0, 3000)
+        "BOMBA GROQ STORY JSON PARSE ERROR:",
+        storyText.slice(0, 4000)
       );
 
       return NextResponse.json(
         {
           status: "failed",
           error:
-            "BOMBA received an invalid story plan from the AI engine.",
+            "BOMBA received invalid JSON from the AI engine.",
+        },
+        { status: 502 }
+      );
+    }
+
+    /*
+     * Basic validation before BOMBA accepts
+     * the generated story.
+     */
+    const requiredFields = [
+      "title",
+      "logline",
+      "genre",
+      "setting",
+      "beginning",
+      "middle",
+      "ending",
+      "conflict",
+      "turningPoint",
+      "themes",
+      "characters",
+      "scenes",
+      "shots",
+    ];
+
+    const missingFields =
+      requiredFields.filter(
+        (field) =>
+          !Object.prototype.hasOwnProperty.call(
+            story,
+            field
+          )
+      );
+
+    if (missingFields.length > 0) {
+      console.error(
+        "BOMBA GROQ STORY MISSING FIELDS:",
+        missingFields
+      );
+
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "BOMBA received an incomplete story plan from the AI engine.",
+          missingFields,
         },
         { status: 502 }
       );
@@ -410,10 +360,13 @@ ${idea}
     return NextResponse.json(
       {
         status: "completed",
+        provider: "groq",
+        model: GROQ_MODEL,
         story,
       },
       {
         status: 200,
+
         headers: {
           "Cache-Control": "no-store",
         },
@@ -421,7 +374,7 @@ ${idea}
     );
   } catch (error) {
     console.error(
-      "BOMBA STORY ENGINE ERROR:",
+      "BOMBA GROQ STORY ENGINE ERROR:",
       error
     );
 
