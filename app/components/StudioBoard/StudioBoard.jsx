@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import {
+  initializeProduction,
+  getProduction,
+  subscribeToProduction,
+} from "../lib/bomba/productionStore";
+
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
   { number: "02", name: "PLAN", icon: "📋" },
@@ -93,6 +99,30 @@ export default function StudioBoard() {
   const [activeModule, setActiveModule] = useState(null);
 
   /* =======================================================
+     BOMBA PRODUCTION BRAIN
+  ======================================================= */
+
+  const [production, setProduction] = useState(null);
+
+  useEffect(() => {
+    let currentProduction = getProduction();
+
+    if (!currentProduction) {
+      currentProduction = initializeProduction("");
+    }
+
+    setProduction(currentProduction);
+
+    const unsubscribe = subscribeToProduction(
+      (nextProduction) => {
+        setProduction(nextProduction);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  /* =======================================================
      SOUND
   ======================================================= */
 
@@ -103,9 +133,12 @@ export default function StudioBoard() {
   const [soundDuration, setSoundDuration] = useState(5);
   const [generatedAudioUrl, setGeneratedAudioUrl] = useState("");
   const [isGeneratingSound, setIsGeneratingSound] = useState(false);
+
   const [generatedSoundStatus, setGeneratedSoundStatus] =
     useState("Ready to create AI sound.");
-  const [generatedSoundError, setGeneratedSoundError] = useState("");
+
+  const [generatedSoundError, setGeneratedSoundError] =
+    useState("");
 
   const generatedAudioRef = useRef(null);
 
@@ -133,7 +166,8 @@ export default function StudioBoard() {
   const [generatedVoiceStatus, setGeneratedVoiceStatus] =
     useState("Ready to create AI voice.");
 
-  const [generatedVoiceError, setGeneratedVoiceError] = useState("");
+  const [generatedVoiceError, setGeneratedVoiceError] =
+    useState("");
 
   const generatedVoiceRef = useRef(null);
 
@@ -244,9 +278,7 @@ export default function StudioBoard() {
       let data = {};
 
       try {
-        data = text
-          ? JSON.parse(text)
-          : {};
+        data = text ? JSON.parse(text) : {};
       } catch {
         throw new Error(
           "Sound server returned an invalid response."
@@ -276,9 +308,7 @@ export default function StudioBoard() {
         return;
       }
 
-      if (
-        data?.status === "processing"
-      ) {
+      if (data?.status === "processing") {
         setGeneratedSoundStatus(
           "⏳ Sound is still processing. Generate again shortly."
         );
@@ -366,7 +396,7 @@ export default function StudioBoard() {
 
   /* =======================================================
      9JALINGO VOICE GENERATION
-  ======================================================= */
+     ======================================================= */
 
   async function generateAIVoice() {
     const cleanText =
@@ -651,6 +681,26 @@ export default function StudioBoard() {
           Build your video from idea to export.
         </p>
       </div>
+
+      {production && (
+        <div
+          style={{
+            marginBottom: "10px",
+            padding: "8px 10px",
+            borderRadius: "8px",
+            background:
+              "rgba(255,212,59,0.045)",
+            border:
+              "1px solid rgba(255,212,59,0.10)",
+            fontSize: "8px",
+            opacity: 0.55,
+          }}
+        >
+          🧠 Production Brain connected
+          {" • "}
+          Project ready
+        </div>
+      )}
 
       <div
         style={{
@@ -1560,18 +1610,23 @@ export default function StudioBoard() {
                 <option value={5}>
                   5 seconds
                 </option>
+
                 <option value={8}>
                   8 seconds
                 </option>
+
                 <option value={10}>
                   10 seconds
                 </option>
+
                 <option value={15}>
                   15 seconds
                 </option>
+
                 <option value={20}>
                   20 seconds
                 </option>
+
                 <option value={30}>
                   30 seconds
                 </option>
