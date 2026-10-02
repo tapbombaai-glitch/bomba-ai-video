@@ -300,7 +300,7 @@ function createTestStoryFromIdea(idea) {
 
    The architecture supports any number of characters.
 
-   For now we only have confirmed provider voices.
+   Confirmed provider voices are assigned only once.
    Extra characters receive reserved voice slots until
    additional real provider voices are confirmed.
 ========================================================= */
@@ -311,7 +311,7 @@ function assignCharacterVoices(characters, language) {
 
   return characters.map((character, index) => {
     const providerVoice =
-  providerVoices[index] || null;
+      providerVoices[index] || null;
 
     return {
       ...character,
@@ -382,6 +382,17 @@ export default function StudioBoard() {
 
   const [characterLanguage, setCharacterLanguage] =
     useState("pcm");
+
+  /* =======================================================
+     SCENES
+  ======================================================= */
+
+  const [sceneStatus, setSceneStatus] = useState(
+    "Build the STORY first. BOMBA will prepare the scene plan."
+  );
+
+  const [selectedSceneNumber, setSelectedSceneNumber] =
+    useState(1);
 
   /* =======================================================
      SOUND
@@ -536,14 +547,13 @@ export default function StudioBoard() {
       const story =
         createTestStoryFromIdea(idea);
 
-      const nextProduction =
-        changeStage(
-          "story",
-          {
-            mode: "test",
-            plan: story,
-          }
-        );
+      changeStage(
+        "story",
+        {
+          mode: "test",
+          plan: story,
+        }
+      );
 
       const characters =
         assignCharacterVoices(
@@ -593,6 +603,12 @@ export default function StudioBoard() {
       setCharacterStatus(
         `✅ ${characters.length} characters created from the STORY.`
       );
+
+      setSceneStatus(
+        `🟡 SCENE PLAN READY. ${story.scenes?.length || 0} scenes and ${story.shots?.length || 0} shots are available from the STORY.`
+      );
+
+      setSelectedSceneNumber(1);
     } catch (error) {
       console.error(
         "BOMBA TEST STORY ERROR:",
@@ -1115,6 +1131,105 @@ export default function StudioBoard() {
     production?.characters?.data
       ?.characters || [];
 
+  const scenes =
+    story?.scenes || [];
+
+  const shots =
+    story?.shots || [];
+
+  const selectedScene =
+    scenes.find(
+      (scene) =>
+        Number(scene.sceneNumber) ===
+        Number(selectedSceneNumber)
+    ) || scenes[0] || null;
+
+  const selectedSceneShots =
+    selectedScene
+      ? shots.filter(
+          (shot) =>
+            Number(shot.sceneNumber) ===
+            Number(
+              selectedScene.sceneNumber
+            )
+        )
+      : [];
+
+  function getModuleStatus(moduleName) {
+    switch (moduleName) {
+      case "IDEA":
+        return production?.idea?.status === "ready"
+          ? "ready"
+          : "waiting";
+
+      case "PLAN":
+        return production?.story?.status === "ready"
+          ? "ready"
+          : "waiting";
+
+      case "CHARACTERS":
+        return characters.length > 0
+          ? "ready"
+          : "waiting";
+
+      case "SCENES":
+        if (
+          production?.scenes?.status ===
+          "completed"
+        ) {
+          return "ready";
+        }
+
+        if (scenes.length > 0) {
+          return "planned";
+        }
+
+        return "waiting";
+
+      case "VOICE":
+        return availableVoices.length > 0
+          ? "ready"
+          : "waiting";
+
+      case "SOUND":
+        return generatedAudioUrl
+          ? "ready"
+          : "waiting";
+
+      case "DIALOGUE":
+      case "VIDEO":
+      case "TIMELINE":
+      case "PREVIEW":
+      case "EXPORT":
+      default:
+        return "waiting";
+    }
+  }
+
+  function getModuleSignal(status) {
+    if (status === "ready") {
+      return {
+        symbol: "🟢",
+        label: "READY",
+        color: "rgba(70,255,150,0.85)",
+      };
+    }
+
+    if (status === "planned") {
+      return {
+        symbol: "🟡",
+        label: "PLANNED",
+        color: "rgba(255,212,59,0.85)",
+      };
+    }
+
+    return {
+      symbol: "⚪",
+      label: "WAITING",
+      color: "rgba(255,255,255,0.42)",
+    };
+  }
+
   /* =========================================================
      UI
   ========================================================= */
@@ -1197,77 +1312,115 @@ export default function StudioBoard() {
         }}
       >
         {modules.map(
-          (module) => (
-            <button
-              key={module.number}
-              type="button"
-              onClick={() =>
-                setActiveModule(
-                  module.name
-                )
-              }
-              style={{
-                width: "100%",
-                minHeight: "58px",
-                padding: "9px",
-                borderRadius: "10px",
-                border:
-                  activeModule ===
-                  module.name
-                    ? "1px solid rgba(255,212,59,0.65)"
-                    : "1px solid rgba(255,255,255,0.10)",
-                background:
-                  activeModule ===
-                  module.name
-                    ? "rgba(255,212,59,0.08)"
-                    : "rgba(255,255,255,0.035)",
-                color: "inherit",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
-            >
-              <div
+          (module) => {
+            const moduleStatus =
+              getModuleStatus(
+                module.name
+              );
+
+            const signal =
+              getModuleSignal(
+                moduleStatus
+              );
+
+            return (
+              <button
+                key={module.number}
+                type="button"
+                onClick={() =>
+                  setActiveModule(
+                    module.name
+                  )
+                }
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
+                  width: "100%",
+                  minHeight: "58px",
+                  padding: "9px",
+                  borderRadius: "10px",
+                  border:
+                    activeModule ===
+                    module.name
+                      ? "1px solid rgba(255,212,59,0.65)"
+                      : "1px solid rgba(255,255,255,0.10)",
+                  background:
+                    activeModule ===
+                    module.name
+                      ? "rgba(255,212,59,0.08)"
+                      : "rgba(255,255,255,0.035)",
+                  color: "inherit",
+                  textAlign: "left",
+                  cursor: "pointer",
                 }}
               >
-                <span
+                <div
                   style={{
-                    fontSize: "18px",
-                    lineHeight: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent:
+                      "space-between",
+                    gap: "8px",
                   }}
                 >
-                  {module.icon}
-                </span>
-
-                <span>
-                  <span
+                  <div
                     style={{
-                      display: "block",
-                      fontSize: "9px",
-                      opacity: 0.45,
-                      marginBottom: "2px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
                     }}
                   >
-                    {module.number}
-                  </span>
+                    <span
+                      style={{
+                        fontSize: "18px",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {module.icon}
+                    </span>
+
+                    <span>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: "9px",
+                          opacity: 0.45,
+                          marginBottom: "2px",
+                        }}
+                      >
+                        {module.number}
+                      </span>
+
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: "11px",
+                          fontWeight: "800",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        {module.name}
+                      </span>
+                    </span>
+                  </div>
 
                   <span
                     style={{
-                      display: "block",
-                      fontSize: "11px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      fontSize: "7px",
                       fontWeight: "800",
-                      letterSpacing: "0.5px",
+                      color: signal.color,
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {module.name}
+                    {signal.symbol}
+                    {" "}
+                    {signal.label}
                   </span>
-                </span>
-              </div>
-            </button>
-          )
+                </div>
+              </button>
+            );
+          }
         )}
       </div>
 
@@ -2099,6 +2252,453 @@ export default function StudioBoard() {
                 )
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* =====================================================
+          SCENE SYSTEM
+      ===================================================== */}
+
+      {activeModule === "SCENES" && (
+        <div
+          style={{
+            marginTop: "14px",
+            padding: "14px",
+            borderRadius: "12px",
+            border:
+              "1px solid rgba(255,212,59,0.20)",
+            background:
+              "rgba(255,212,59,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              marginBottom: "12px",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "700",
+                  letterSpacing: "1px",
+                  opacity: 0.55,
+                }}
+              >
+                SCENE SYSTEM
+              </div>
+
+              <h3
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: "16px",
+                  fontWeight: "800",
+                }}
+              >
+                🎬 SCENES
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveModule(null)
+              }
+              style={{
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                background:
+                  "rgba(255,255,255,0.05)",
+                color: "inherit",
+                borderRadius: "8px",
+                padding: "6px 9px",
+                fontSize: "11px",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: "10px",
+              borderRadius: "9px",
+              background:
+                scenes.length > 0
+                  ? "rgba(255,212,59,0.06)"
+                  : "rgba(255,255,255,0.035)",
+              border:
+                scenes.length > 0
+                  ? "1px solid rgba(255,212,59,0.18)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              marginBottom: "10px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "9px",
+                fontWeight: "800",
+                marginBottom: "5px",
+              }}
+            >
+              {scenes.length > 0
+                ? "🟡 SCENE PLAN CONNECTED"
+                : "⚪ SCENE PLAN WAITING"}
+            </div>
+
+            <div
+              style={{
+                fontSize: "8px",
+                opacity: 0.58,
+                lineHeight: 1.5,
+              }}
+            >
+              {scenes.length > 0
+                ? `${scenes.length} scenes and ${shots.length} planned shots are being read directly from the STORY.`
+                : "Build the STORY first. The Scene System will read the scenes and shots from the STORY."}
+            </div>
+          </div>
+
+          {scenes.length === 0 && (
+            <div
+              style={{
+                padding: "12px",
+                borderRadius: "9px",
+                background:
+                  "rgba(255,255,255,0.035)",
+                fontSize: "9px",
+                lineHeight: 1.5,
+                opacity: 0.65,
+              }}
+            >
+              No scene plan is available yet.
+              Build the TEST STORY from 02 PLAN first.
+            </div>
+          )}
+
+          {scenes.length > 0 && (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(2, minmax(0, 1fr))",
+                  gap: "7px",
+                  marginBottom: "10px",
+                }}
+              >
+                {scenes.map(
+                  (scene) => {
+                    const active =
+                      Number(
+                        selectedScene?.sceneNumber
+                      ) ===
+                      Number(
+                        scene.sceneNumber
+                      );
+
+                    const sceneShots =
+                      shots.filter(
+                        (shot) =>
+                          Number(
+                            shot.sceneNumber
+                          ) ===
+                          Number(
+                            scene.sceneNumber
+                          )
+                      );
+
+                    return (
+                      <button
+                        key={
+                          scene.sceneNumber
+                        }
+                        type="button"
+                        onClick={() =>
+                          setSelectedSceneNumber(
+                            scene.sceneNumber
+                          )
+                        }
+                        style={{
+                          padding: "9px",
+                          borderRadius: "8px",
+                          border: active
+                            ? "1px solid rgba(255,212,59,0.55)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                          background: active
+                            ? "rgba(255,212,59,0.10)"
+                            : "rgba(255,255,255,0.035)",
+                          color: "inherit",
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "8px",
+                            opacity: 0.5,
+                            marginBottom: "3px",
+                          }}
+                        >
+                          SCENE{" "}
+                          {scene.sceneNumber}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "800",
+                          }}
+                        >
+                          {scene.title}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            fontSize: "7px",
+                            opacity: 0.5,
+                          }}
+                        >
+                          {sceneShots.length} shot
+                          {sceneShots.length === 1
+                            ? ""
+                            : "s"}
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              {selectedScene && (
+                <div
+                  style={{
+                    padding: "12px",
+                    borderRadius: "10px",
+                    background:
+                      "rgba(255,255,255,0.035)",
+                    border:
+                      "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent:
+                        "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: "8px",
+                          opacity: 0.5,
+                          marginBottom: "3px",
+                        }}
+                      >
+                        SCENE{" "}
+                        {selectedScene.sceneNumber}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "15px",
+                          fontWeight: "800",
+                        }}
+                      >
+                        {selectedScene.title}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "4px 7px",
+                        borderRadius: "6px",
+                        background:
+                          "rgba(255,212,59,0.08)",
+                        border:
+                          "1px solid rgba(255,212,59,0.18)",
+                        fontSize: "7px",
+                        fontWeight: "800",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      🟡 PLANNED
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "7px",
+                      marginTop: "10px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "9px",
+                      }}
+                    >
+                      <strong>📍 Location:</strong>{" "}
+                      {selectedScene.location ||
+                        "Not specified"}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "9px",
+                      }}
+                    >
+                      <strong>🕐 Time:</strong>{" "}
+                      {selectedScene.time ||
+                        "Not specified"}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "9px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong>🎭 Action:</strong>{" "}
+                      {selectedScene.description ||
+                        "No action description yet."}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "9px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong>🎯 Purpose:</strong>{" "}
+                      {selectedScene.purpose ||
+                        "No scene purpose yet."}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      fontSize: "10px",
+                      fontWeight: "800",
+                    }}
+                  >
+                    📷 SHOTS
+                  </div>
+
+                  {selectedSceneShots.length ===
+                    0 && (
+                    <div
+                      style={{
+                        marginTop: "7px",
+                        padding: "9px",
+                        borderRadius: "7px",
+                        background:
+                          "rgba(0,0,0,0.20)",
+                        fontSize: "8px",
+                        opacity: 0.6,
+                      }}
+                    >
+                      No shots planned for this scene yet.
+                    </div>
+                  )}
+
+                  {selectedSceneShots.length >
+                    0 && (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "7px",
+                        marginTop: "7px",
+                      }}
+                    >
+                      {selectedSceneShots.map(
+                        (shot) => (
+                          <div
+                            key={
+                              shot.shotNumber
+                            }
+                            style={{
+                              padding: "9px",
+                              borderRadius: "8px",
+                              background:
+                                "rgba(0,0,0,0.20)",
+                              border:
+                                "1px solid rgba(255,255,255,0.07)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent:
+                                  "space-between",
+                                gap: "8px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "9px",
+                                  fontWeight: "800",
+                                }}
+                              >
+                                SHOT{" "}
+                                {
+                                  shot.shotNumber
+                                }
+                              </div>
+
+                              <div
+                                style={{
+                                  fontSize: "7px",
+                                  opacity: 0.5,
+                                }}
+                              >
+                                {shot.shotType ||
+                                  "Shot"}
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: "5px",
+                                fontSize: "8px",
+                                opacity: 0.62,
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {shot.description ||
+                                "No shot description yet."}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: "5px",
+                                fontSize: "7px",
+                                opacity: 0.45,
+                              }}
+                            >
+                              🎥{" "}
+                              {shot.camera ||
+                                "Camera not specified"}
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
