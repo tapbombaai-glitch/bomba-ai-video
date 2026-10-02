@@ -1416,9 +1416,107 @@ export default function StudioBoard() {
         );
 
       const voicePublicId =
-        cloudinaryResult.public_id;
+  cloudinaryResult.public_id;
 
-      localStorage.setItem(
+// ===== BOMBA PRODUCTION BRAIN: SAVE VOICE =====
+
+try {
+  const currentDialogueLines =
+    production?.dialogue?.data?.lines || [];
+
+  const matchingLine =
+    currentDialogueLines.find(
+      (line) =>
+        line.text?.trim() === cleanText &&
+        line.voice?.voiceId === cleanVoiceId
+    );
+
+  if (matchingLine) {
+    const existingVoiceLines =
+      production?.voices?.data?.lines || [];
+
+    const generatedVoiceLine = {
+      dialogueId: matchingLine.id,
+      sceneNumber:
+        matchingLine.sceneNumber,
+      lineNumber:
+        matchingLine.lineNumber,
+      characterId:
+        matchingLine.characterId,
+      characterName:
+        matchingLine.characterName,
+      text: matchingLine.text,
+      language:
+        matchingLine.language || voiceLanguage,
+
+      voice: {
+        ...matchingLine.voice,
+        voiceId: cleanVoiceId,
+        status: "ready",
+      },
+
+      audio: {
+        status: "ready",
+        url:
+          cloudinaryResult.secure_url ||
+          audioUrl,
+        publicId: voicePublicId,
+        resourceType: "video",
+        durationSec:
+          matchingLine.timing
+            ?.durationEstimateSec || null,
+      },
+
+      timing:
+        matchingLine.timing || {},
+    };
+
+    const nextVoiceLines = [
+      ...existingVoiceLines.filter(
+        (line) =>
+          line.dialogueId !==
+          matchingLine.id
+      ),
+      generatedVoiceLine,
+    ];
+
+    const nextVoiceData = {
+      mode: "test",
+      language: voiceLanguage,
+      lines: nextVoiceLines,
+      totalLines:
+        currentDialogueLines.length,
+      generatedLines:
+        nextVoiceLines.length,
+      completedAt:
+        new Date().toISOString(),
+    };
+
+    const nextProduction =
+      changeStage(
+        "voices",
+        nextVoiceData
+      );
+
+    setProduction(
+      nextProduction
+    );
+
+    console.log(
+      "BOMBA PRODUCTION BRAIN VOICE SAVED:",
+      generatedVoiceLine
+    );
+  }
+} catch (productionError) {
+  console.error(
+    "BOMBA PRODUCTION BRAIN VOICE SAVE ERROR:",
+    productionError
+  );
+}
+
+// ===== EXISTING LOCAL STORAGE =====
+
+localStorage.setItem(
         "bomba_voice_public_id",
         voicePublicId
       );
