@@ -710,6 +710,12 @@ export default function StudioBoard() {
      SOUND
   ======================================================= */
 
+const [videoPlan, setVideoPlan] = useState(null);
+const [videoPlanStatus, setVideoPlanStatus] = useState(
+  "VIDEO PLAN WAITING"
+);
+const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
+  useState(false);
   const [soundPrompt, setSoundPrompt] = useState(
     "cinematic emotional background music for a realistic movie scene"
   );
