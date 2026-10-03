@@ -1,4 +1,5 @@
 import { supabase } from "../../../../lib/supabase";
+import { randomBytes } from "crypto";
 
 export async function POST(req) {
   try {
@@ -58,11 +59,9 @@ export async function POST(req) {
       });
     }
 
-    // 5. Generate a new BOMBA API key
+    // 5. Generate a cryptographically secure BOMBA API key
     const key_code =
-      "bomba_" +
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 8);
+      "bomba_" + randomBytes(32).toString("hex");
 
     // 6. Create the 3-video free trial
     const { data, error } = await supabase
@@ -97,7 +96,10 @@ export async function POST(req) {
       key: data.key_code,
       videos_allowed: data.videos_allowed,
       videos_used: data.videos_used,
-      remaining_videos: data.videos_allowed - data.videos_used,
+      remaining_videos: Math.max(
+        0,
+        data.videos_allowed - data.videos_used
+      ),
       message:
         "BOMBA API Key created successfully. You have 3 free video generations.",
     });
