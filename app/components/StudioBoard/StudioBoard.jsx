@@ -4153,6 +4153,462 @@ localStorage.setItem(
         </div>
       )}
 
+{/* =====================================================
+    VIDEO PRODUCTION SYSTEM
+===================================================== */}
+
+{activeModule === "VIDEO" && (
+  <div
+    style={{
+      marginTop: "14px",
+      padding: "14px",
+      borderRadius: "12px",
+      border:
+        "1px solid rgba(255,212,59,0.20)",
+      background:
+        "rgba(255,212,59,0.04)",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "10px",
+        marginBottom: "12px",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: "10px",
+            fontWeight: "700",
+            letterSpacing: "1px",
+            opacity: 0.55,
+          }}
+        >
+          VIDEO PRODUCTION SYSTEM
+        </div>
+
+        <h3
+          style={{
+            margin: "4px 0 0",
+            fontSize: "16px",
+            fontWeight: "800",
+          }}
+        >
+          🎥 VIDEO
+        </h3>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          setActiveModule(null)
+        }
+        style={{
+          border:
+            "1px solid rgba(255,255,255,0.12)",
+          background:
+            "rgba(255,255,255,0.05)",
+          color: "inherit",
+          borderRadius: "8px",
+          padding: "6px 9px",
+          fontSize: "11px",
+          cursor: "pointer",
+        }}
+      >
+        CLOSE
+      </button>
+    </div>
+
+    <div
+      style={{
+        padding: "12px",
+        borderRadius: "10px",
+        border:
+          "1px solid rgba(255,212,59,0.30)",
+        background:
+          "rgba(255,212,59,0.07)",
+        marginBottom: "10px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "10px",
+          fontWeight: "800",
+          letterSpacing: "1px",
+          marginBottom: "5px",
+        }}
+      >
+        🎬 BOMBA AI VIDEO ENGINE
+      </div>
+
+      <div
+        style={{
+          fontSize: "9px",
+          opacity: 0.55,
+          lineHeight: 1.5,
+        }}
+      >
+        The Video Engine connects your STORY,
+        SCENES, SHOTS, DIALOGUE, VOICE and SOUND
+        into one production plan.
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns:
+          "repeat(2, minmax(0, 1fr))",
+        gap: "7px",
+        marginBottom: "10px",
+      }}
+    >
+      {[
+        {
+          label: "STORY",
+          ready: Boolean(story),
+          value: story?.title || "Waiting",
+        },
+        {
+          label: "SCENES",
+          ready: scenes.length > 0,
+          value: `${scenes.length} scenes`,
+        },
+        {
+          label: "SHOTS",
+          ready: shots.length > 0,
+          value: `${shots.length} shots`,
+        },
+        {
+          label: "DIALOGUE",
+          ready: Boolean(dialoguePlan),
+          value: dialoguePlan
+            ? `${dialoguePlan.totalLines || 0} lines`
+            : "Waiting",
+        },
+        {
+          label: "VOICE",
+          ready:
+            Boolean(
+              production?.voices?.data?.lines?.length
+            ) ||
+            Boolean(
+              generatedVoiceUrl
+            ),
+          value:
+            generatedVoiceUrl ||
+            production?.voices?.data?.lines?.length
+              ? "Connected"
+              : "Waiting",
+        },
+        {
+          label: "SOUND",
+          ready: Boolean(generatedAudioUrl),
+          value: generatedAudioUrl
+            ? "Connected"
+            : "Waiting",
+        },
+      ].map((item) => (
+        <div
+          key={item.label}
+          style={{
+            padding: "9px",
+            borderRadius: "8px",
+            background: item.ready
+              ? "rgba(70,255,150,0.06)"
+              : "rgba(255,255,255,0.035)",
+            border: item.ready
+              ? "1px solid rgba(70,255,150,0.16)"
+              : "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "7px",
+              opacity: 0.5,
+              marginBottom: "3px",
+            }}
+          >
+            {item.label}
+          </div>
+
+          <div
+            style={{
+              fontSize: "9px",
+              fontWeight: "800",
+            }}
+          >
+            {item.ready ? "🟢" : "⚪"}{" "}
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <button
+      type="button"
+      onClick={buildVideoPlan}
+      disabled={
+        isBuildingVideoPlan ||
+        !story ||
+        !scenes.length
+      }
+      style={{
+        width: "100%",
+        padding: "12px",
+        borderRadius: "8px",
+        border:
+          "1px solid rgba(255,212,59,0.45)",
+        background:
+          "rgba(255,212,59,0.15)",
+        color: "inherit",
+        fontSize: "10px",
+        fontWeight: "800",
+        cursor:
+          isBuildingVideoPlan
+            ? "wait"
+            : "pointer",
+        opacity:
+          isBuildingVideoPlan ||
+          !story ||
+          !scenes.length
+            ? 0.5
+            : 1,
+      }}
+    >
+      {isBuildingVideoPlan
+        ? "⏳ BUILDING VIDEO PLAN..."
+        : "🎥 BUILD VIDEO PLAN"}
+    </button>
+
+    <div
+      style={{
+        marginTop: "10px",
+        padding: "9px",
+        borderRadius: "8px",
+        background:
+          "rgba(0,0,0,0.20)",
+        fontSize: "9px",
+        lineHeight: 1.5,
+        textAlign: "center",
+      }}
+    >
+      {videoPlanStatus}
+    </div>
+
+    {videoPlan && (
+      <div
+        style={{
+          marginTop: "10px",
+          display: "grid",
+          gap: "8px",
+        }}
+      >
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "9px",
+            background:
+              "rgba(70,255,150,0.06)",
+            border:
+              "1px solid rgba(70,255,150,0.18)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "10px",
+              fontWeight: "800",
+              marginBottom: "5px",
+            }}
+          >
+            🟢 VIDEO PLAN CONNECTED
+          </div>
+
+          <div
+            style={{
+              fontSize: "8px",
+              opacity: 0.6,
+              lineHeight: 1.5,
+            }}
+          >
+            {videoPlan.totalScenes} scenes •{" "}
+            {videoPlan.totalShots} shots
+            <br />
+            Voice:{" "}
+            {videoPlan.voiceConnected
+              ? "Connected"
+              : "Waiting"}
+            {" • "}
+            Sound:{" "}
+            {videoPlan.soundConnected
+              ? "Connected"
+              : "Waiting"}
+          </div>
+        </div>
+
+        {videoPlan.scenes.map(
+          (videoScene) => (
+            <div
+              key={
+                videoScene.sceneNumber
+              }
+              style={{
+                padding: "11px",
+                borderRadius: "9px",
+                background:
+                  "rgba(255,255,255,0.035)",
+                border:
+                  "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  gap: "8px",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: "7px",
+                      opacity: 0.5,
+                    }}
+                  >
+                    SCENE{" "}
+                    {videoScene.sceneNumber}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "3px",
+                      fontSize: "11px",
+                      fontWeight: "800",
+                    }}
+                  >
+                    {videoScene.title}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    fontSize: "7px",
+                    padding: "4px 6px",
+                    borderRadius: "6px",
+                    background:
+                      "rgba(70,255,150,0.08)",
+                    border:
+                      "1px solid rgba(70,255,150,0.16)",
+                    whiteSpace:
+                      "nowrap",
+                  }}
+                >
+                  READY
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "8px",
+                  display: "grid",
+                  gap: "6px",
+                }}
+              >
+                {videoScene.shots.map(
+                  (shot) => (
+                    <div
+                      key={shot.id}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "7px",
+                        background:
+                          "rgba(0,0,0,0.20)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "8px",
+                          fontWeight: "800",
+                        }}
+                      >
+                        SHOT{" "}
+                        {shot.shotNumber}
+                        {" • "}
+                        {shot.shotType}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "4px",
+                          fontSize: "8px",
+                          opacity: 0.6,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {shot.description}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "5px",
+                          fontSize: "7px",
+                          opacity: 0.45,
+                        }}
+                      >
+                        🎥 {shot.camera}
+                      </div>
+
+                      {shot.character && (
+                        <div
+                          style={{
+                            marginTop: "5px",
+                            fontSize: "7px",
+                            opacity: 0.55,
+                          }}
+                        >
+                          👤{" "}
+                          {shot.character}
+                        </div>
+                      )}
+
+                      {shot.dialogue && (
+                        <div
+                          style={{
+                            marginTop: "5px",
+                            fontSize: "8px",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          💬 “{shot.dialogue}”
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          marginTop: "6px",
+                          fontSize: "7px",
+                          color:
+                            "rgba(70,255,150,0.75)",
+                          fontWeight: "800",
+                        }}
+                      >
+                        ● READY FOR VIDEO GENERATION
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )
+        )}
+      </div>
+    )}
+  </div>
+)}
       {/* =====================================================
           SOUND STUDIO
       ===================================================== */}
