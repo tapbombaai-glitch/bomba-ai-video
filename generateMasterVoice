@@ -366,19 +366,50 @@ async function generateMasterVoice(dialogue, characters = []) {
       );
     }
 
-    const audioUrl =
-      URL.createObjectURL(audioBlob);
+    const cloudinary =
+  await uploadVoiceToCloudinary(
+    audioBlob
+  );
 
-    generatedAudio.push({
-      index,
-      speaker,
-      text,
-      voiceId,
-      language,
-      audioUrl,
-      blob: audioBlob,
-    });
-  }
+if (!cloudinary?.public_id) {
+  throw new Error(
+    `Cloudinary upload failed for ${
+      speaker || "unknown character"
+    }.`
+  );
+}
+
+const cloudinary =
+  await uploadVoiceToCloudinary(audioBlob);
+
+if (!cloudinary?.public_id) {
+  throw new Error(
+    `Cloudinary upload failed for ${
+      speaker || "unknown character"
+    }.`
+  );
+}
+
+const audioUrl =
+  cloudinary?.secure_url ||
+  cloudinary?.url ||
+  URL.createObjectURL(audioBlob);
+
+generatedAudio.push({
+  index,
+  speaker,
+  text,
+  voiceId,
+  language,
+  audioUrl,
+  cloudinaryPublicId:
+    cloudinary.public_id,
+  resourceType:
+    cloudinary.resource_type ||
+    "video",
+  status: "completed",
+  blob: audioBlob,
+});
 
   // -----------------------------------------
   // Return complete character voice production
