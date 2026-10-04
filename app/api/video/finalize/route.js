@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -16,6 +22,10 @@ const CLOUDINARY_UPLOAD_URL =
       )}/video/upload`
     : "";
 
+if (ffmpegPath) {
+  ffmpeg.setFfmpegPath(ffmpegPath);
+}
+
 function safeParse(text) {
   try {
     return JSON.parse(text);
@@ -24,22 +34,136 @@ function safeParse(text) {
   }
 }
 
-function cloudinaryLayerId(publicId) {
-  return String(publicId || "")
-    .replace(/\//g, ":")
-    .trim();
+function cloudinaryAudioUrl(publicId) {
+  const cleanId = String(publicId || "")
+    .trim()
+    .replace(/^\/+/, "");
+
+  return `https://res.cloudinary.com/${encodeURIComponent(
+    CLOUDINARY_CLOUD_NAME
+  )}/video/upload/${cleanId}.mp3`;
 }
 
-/* =========================================================
-   POST
-   Eternal AI VIDEO URL
-        +
-   Cloudinary VOICE PUBLIC ID
-        ↓
-   FINAL VIDEO URL
-========================================================= */
+async function downloadFile(url, outputPath) {
+  const response = await fetch(url, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to download media. HTTP ${response.status}`
+    );
+  }
+
+  const buffer = Buffer.from(
+    await response.arrayBuffer()
+  );
+
+  await fs.writeFile(outputPath, buffer);
+
+  return outputPath;
+}
+
+function runFfmpeg({
+  videoPath,
+  audioPaths,
+  audioStartTimes,
+  outputPath,
+}) {
+  return new Promise((resolve, reject) => {
+    const command = ffmpeg(videoPath);
+
+    audioPaths.forEach((audioPath) => {
+      command.input(audioPath);
+    });
+
+    const inputCount = audioPaths.length;
+
+    const filterParts = [];
+
+    /*
+      Prepare each character voice.
+
+      Example:
+
+      Voice A starts at 0 sec
+      Voice B starts at 4.5 sec
+      Voice C starts at 8 sec
+    */
+
+    audioPaths.forEach((_, index) => {
+      const delayMs = Math.max(
+        0,
+        Math.round(
+          Number(audioStartTimes[index] || 0) * 1000
+        )
+      );
+
+      filterParts.push(
+        `[${index + 1}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
+      );
+    });
+
+    const mixInputs = audioPaths
+      .map((_, index) => `[voice${index}]`)
+      .join("");
+
+    filterParts.push(
+      `${mixInputs}amix=inputs=${inputCount}:duration=longest:dropout_transition=0[mixedVoice]`
+    );
+
+    filterParts.push(
+      `[0:v]copy[vout]`
+    );
+
+    command
+      .complexFilter(filterParts)
+      .outputOptions([
+        "-map [vout]",
+        "-map [mixedVoice]",
+        "-c:v copy",
+        "-c:a aac",
+        "-b:a 192k",
+        "-shortest",
+        "-movflags +faststart",
+      ])
+      .on("start", (commandLine) => {
+        console.log(
+          "BOMBA FFMPEG START:",
+          commandLine
+        );
+      })
+      .on("progress", (progress) => {
+        if (progress?.percent) {
+          console.log(
+            `BOMBA FFMPEG PROGRESS: ${progress.percent.toFixed(
+              1
+            )}%`
+          );
+        }
+      })
+      .on("end", () => {
+        console.log(
+          "BOMBA FFMPEG COMPLETE"
+        );
+
+        resolve();
+      })
+      .on("error", (error) => {
+        console.error(
+          "BOMBA FFMPEG ERROR:",
+          error
+        );
+
+        reject(error);
+      })
+      .save(outputPath);
+  });
+}
 
 export async function POST(request) {
+  let workDir = "";
+
   try {
     if (!CLOUDINARY_CLOUD_NAME) {
       return NextResponse.json(
@@ -63,6 +187,17 @@ export async function POST(request) {
       );
     }
 
+    if (!ffmpegPath) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "FFmpeg binary is not available.",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     const videoUrl =
@@ -70,10 +205,66 @@ export async function POST(request) {
         ? body.videoUrl.trim()
         : "";
 
-    const voicePublicId =
+    /*
+      NEW MULTI-VOICE FORMAT
+
+      voiceTracks: [
+        {
+          publicId: "voice/daniel",
+          startTime: 0
+        },
+        {
+          publicId: "voice/sarah",
+          startTime: 4.5
+        }
+      ]
+    */
+
+    const incomingVoiceTracks = Array.isArray(
+      body?.voiceTracks
+    )
+      ? body.voiceTracks
+      : [];
+
+    /*
+      BACKWARD COMPATIBILITY
+
+      The old frontend can still send:
+
+      voicePublicId: "voice/daniel"
+    */
+
+    const legacyVoicePublicId =
       typeof body?.voicePublicId === "string"
         ? body.voicePublicId.trim()
         : "";
+
+    const voiceTracks =
+      incomingVoiceTracks.length > 0
+        ? incomingVoiceTracks
+            .map((track) => ({
+              publicId:
+                typeof track?.publicId === "string"
+                  ? track.publicId.trim()
+                  : "",
+              startTime:
+                Number.isFinite(
+                  Number(track?.startTime)
+                )
+                  ? Number(track.startTime)
+                  : 0,
+            }))
+            .filter(
+              (track) => track.publicId
+            )
+        : legacyVoicePublicId
+        ? [
+            {
+              publicId: legacyVoicePublicId,
+              startTime: 0,
+            },
+          ]
+        : [];
 
     if (!videoUrl) {
       return NextResponse.json(
@@ -85,11 +276,12 @@ export async function POST(request) {
       );
     }
 
-    if (!voicePublicId) {
+    if (!voiceTracks.length) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "voicePublicId is required.",
+          error:
+            "At least one voice track is required.",
         },
         { status: 400 }
       );
@@ -114,7 +306,7 @@ export async function POST(request) {
     );
 
     console.log(
-      "BOMBA FINAL VIDEO STARTING"
+      "BOMBA MULTI-VOICE FINAL VIDEO STARTING"
     );
 
     console.log(
@@ -123,36 +315,152 @@ export async function POST(request) {
     );
 
     console.log(
-      "VOICE PUBLIC ID:",
-      voicePublicId
+      "VOICE TRACK COUNT:",
+      voiceTracks.length
+    );
+
+    console.log(
+      "VOICE TRACKS:",
+      voiceTracks
     );
 
     console.log(
       "======================================"
     );
 
-    /* =====================================================
-       STEP 1
-       Upload Eternal AI video into Cloudinary.
-    ===================================================== */
+    /*
+      STEP 1
+      Create temporary working directory.
+    */
 
-    const formData = new FormData();
+    workDir = path.join(
+      os.tmpdir(),
+      `bomba-final-${crypto
+        .randomBytes(8)
+        .toString("hex")}`
+    );
 
-    formData.append("file", videoUrl);
+    await fs.mkdir(workDir, {
+      recursive: true,
+    });
 
-    formData.append(
+    const videoInputPath = path.join(
+      workDir,
+      "input-video.mp4"
+    );
+
+    /*
+      STEP 2
+      Download Eternal AI video.
+    */
+
+    await downloadFile(
+      videoUrl,
+      videoInputPath
+    );
+
+    console.log(
+      "BOMBA VIDEO DOWNLOADED:",
+      videoInputPath
+    );
+
+    /*
+      STEP 3
+      Download every character voice.
+    */
+
+    const audioPaths = [];
+    const audioStartTimes = [];
+
+    for (
+      let index = 0;
+      index < voiceTracks.length;
+      index++
+    ) {
+      const track =
+        voiceTracks[index];
+
+      const audioUrl =
+        cloudinaryAudioUrl(
+          track.publicId
+        );
+
+      const audioPath = path.join(
+        workDir,
+        `voice-${index}.mp3`
+      );
+
+      console.log(
+        `BOMBA DOWNLOADING VOICE ${index + 1}:`,
+        audioUrl
+      );
+
+      await downloadFile(
+        audioUrl,
+        audioPath
+      );
+
+      audioPaths.push(audioPath);
+
+      audioStartTimes.push(
+        track.startTime
+      );
+    }
+
+    /*
+      STEP 4
+      Mix all character voices with
+      their individual start times.
+    */
+
+    const mixedVideoPath =
+      path.join(
+        workDir,
+        "mixed-video.mp4"
+      );
+
+    await runFfmpeg({
+      videoPath: videoInputPath,
+      audioPaths,
+      audioStartTimes,
+      outputPath: mixedVideoPath,
+    });
+
+    /*
+      STEP 5
+      Upload finished video to Cloudinary.
+    */
+
+    const uploadFormData =
+      new FormData();
+
+    const finishedVideoBuffer =
+      await fs.readFile(
+        mixedVideoPath
+      );
+
+    uploadFormData.append(
+      "file",
+      new Blob([
+        finishedVideoBuffer,
+      ]),
+      "bomba-final-video.mp4"
+    );
+
+    uploadFormData.append(
       "upload_preset",
       CLOUDINARY_VIDEO_PRESET
     );
 
-    const uploadResponse = await fetch(
-      CLOUDINARY_UPLOAD_URL,
-      {
-        method: "POST",
-        body: formData,
-        cache: "no-store",
-      }
-    );
+    const uploadResponse =
+      await fetch(
+        CLOUDINARY_UPLOAD_URL,
+        {
+          method: "POST",
+          body: uploadFormData,
+          cache: "no-store",
+        }
+      );
 
     const uploadText =
       await uploadResponse.text();
@@ -161,14 +469,17 @@ export async function POST(request) {
       safeParse(uploadText);
 
     console.log(
-      "BOMBA CLOUDINARY VIDEO UPLOAD STATUS:",
+      "BOMBA FINAL CLOUDINARY UPLOAD STATUS:",
       uploadResponse.status
     );
 
     if (!uploadResponse.ok) {
       console.error(
-        "BOMBA CLOUDINARY VIDEO UPLOAD ERROR:",
-        uploadText.slice(0, 1500)
+        "BOMBA FINAL CLOUDINARY UPLOAD ERROR:",
+        uploadText.slice(
+          0,
+          1500
+        )
       );
 
       return NextResponse.json(
@@ -177,7 +488,7 @@ export async function POST(request) {
           error:
             uploadData?.error?.message ||
             uploadData?.error ||
-            `Cloudinary video upload failed with HTTP ${uploadResponse.status}.`,
+            `Cloudinary final video upload failed with HTTP ${uploadResponse.status}.`,
         },
         {
           status:
@@ -189,59 +500,36 @@ export async function POST(request) {
       );
     }
 
-    const videoPublicId =
+    const finalVideoPublicId =
       uploadData?.public_id;
 
-    if (!videoPublicId) {
+    const finalVideoUrl =
+      uploadData?.secure_url ||
+      uploadData?.url;
+
+    if (
+      !finalVideoPublicId ||
+      !finalVideoUrl
+    ) {
       return NextResponse.json(
         {
           status: "failed",
           error:
-            "Cloudinary uploaded the video but did not return a public ID.",
+            "Cloudinary uploaded the final video but did not return a usable video URL.",
         },
         { status: 502 }
       );
     }
 
     console.log(
-      "BOMBA CLOUDINARY VIDEO PUBLIC ID:",
-      videoPublicId
+      "BOMBA FINAL VIDEO PUBLIC ID:",
+      finalVideoPublicId
     );
-
-    /* =====================================================
-       STEP 2
-       Build automatic audio overlay transformation.
-       
-       ac_none
-       ↓
-       remove existing video audio
-
-       l_audio:VOICE
-       ↓
-       add 9jaLingo voice
-    ===================================================== */
-
-    const safeVideoPublicId =
-      videoPublicId;
-
-    const safeVoicePublicId =
-      cloudinaryLayerId(
-        voicePublicId
-      );
-
-    const finalVideoUrl =
-      `https://res.cloudinary.com/${encodeURIComponent(
-        CLOUDINARY_CLOUD_NAME
-      )}/video/upload/ac_none/l_audio:${safeVoicePublicId}/fl_layer_apply/${safeVideoPublicId}.mp4`;
 
     console.log(
       "BOMBA FINAL VIDEO URL:",
       finalVideoUrl
     );
-
-    /* =====================================================
-       RETURN FINAL VIDEO
-    ===================================================== */
 
     return NextResponse.json(
       {
@@ -249,14 +537,14 @@ export async function POST(request) {
         videoUrl: finalVideoUrl,
         finalVideoUrl,
         cloudinaryVideoPublicId:
-          videoPublicId,
-        cloudinaryVoicePublicId:
-          voicePublicId,
+          finalVideoPublicId,
+        voiceTracks,
       },
       {
         status: 200,
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control":
+            "no-store",
         },
       }
     );
@@ -271,9 +559,30 @@ export async function POST(request) {
         status: "failed",
         error:
           error?.message ||
-          "Unable to automatically combine the video and voice.",
+          "Unable to combine the video and character voices.",
       },
       { status: 500 }
     );
+  } finally {
+    /*
+      Always clean temporary files.
+    */
+
+    if (workDir) {
+      try {
+        await fs.rm(
+          workDir,
+          {
+            recursive: true,
+            force: true,
+          }
+        );
+      } catch (cleanupError) {
+        console.error(
+          "BOMBA TEMP CLEANUP ERROR:",
+          cleanupError
+        );
+      }
+    }
   }
 }
