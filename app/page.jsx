@@ -5,6 +5,11 @@ import { supabase } from "../lib/supabase";
 import PlanPanel from "./components/Plan/PlanPanel";
 import StudioBoard from "./components/StudioBoard/StudioBoard";
 
+import {
+  initializeProduction,
+  changeStage,
+} from "../lib/bomba/productionStore";
+
 export default function Home() {
   const [mode, setMode] = useState("Movie");
   const [prompt, setPrompt] = useState("");
@@ -22,6 +27,7 @@ export default function Home() {
   const [apiMessage, setApiMessage] = useState("");
 
   const pollingRef = useRef(null);
+
   const fileInputRef = useRef(null);
 
   const modes = [
@@ -63,21 +69,11 @@ export default function Home() {
         parsed === null ||
         typeof parsed !== "object"
       ) {
-        console.error(
-          "BOMBA INVALID JSON OBJECT:",
-          parsed
-        );
-
         return {};
       }
 
       return parsed;
-    } catch (parseError) {
-      console.error(
-        "BOMBA NON-JSON RESPONSE:",
-        text
-      );
-
+    } catch {
       throw new Error(
         text.length > 500
           ? text.substring(0, 500)
@@ -87,7 +83,7 @@ export default function Home() {
   };
 
   /* =====================================================
-     SAFE ERROR MESSAGE
+     SAFE ERROR
   ===================================================== */
 
   const getSafeErrorMessage = (
@@ -164,7 +160,7 @@ export default function Home() {
   };
 
   /* =====================================================
-     STOP VIDEO CHECKING
+     STOP POLLING
   ===================================================== */
 
   const stopPolling = () => {
@@ -237,7 +233,676 @@ export default function Home() {
   };
 
   /* =====================================================
-     FINALIZE VIDEO WITH BOMBA AI VOICE
+     MARK PRODUCTION STAGE
+  ===================================================== */
+
+  const markStage = (
+    stage,
+    data
+  ) => {
+    try {
+      return changeStage(stage, data);
+    } catch (stageError) {
+      console.error(
+        `BOMBA ${stage.toUpperCase()} STAGE ERROR:`,
+        stageError
+      );
+
+      return null;
+    }
+  };
+
+  /* =====================================================
+     CREATE MASTER STORY
+  ===================================================== */
+
+  const createMasterStory = (
+    cleanIdea
+  ) => {
+    const title =
+      cleanIdea.length > 70
+        ? cleanIdea.substring(0, 70)
+        : cleanIdea;
+
+    return {
+      id: `story-${Date.now()}`,
+
+      title:
+        title ||
+        "BOMBA AI Production",
+
+      logline:
+        `A cinematic ${mode.toLowerCase()} story based on: ${cleanIdea}`,
+
+      genre:
+        mode === "Ad"
+          ? "Commercial"
+          : mode === "Social Media"
+            ? "Social"
+            : "Drama / Cinematic",
+
+      setting:
+        "Modern Nigeria",
+
+      beginning:
+        `The story begins with the main character experiencing the situation described in the idea: ${cleanIdea}`,
+
+      middle:
+        "The main character moves through the environment, interacts naturally with the people around them, and the situation develops.",
+
+      conflict:
+        "A realistic obstacle or moment of uncertainty creates tension.",
+
+      turningPoint:
+        "The main character makes an important decision that changes the direction of the story.",
+
+      ending:
+        "The story concludes with a natural cinematic resolution.",
+
+      themes: [
+        "Human connection",
+        "Real life",
+        "Courage",
+        "Growth",
+      ],
+
+      scenes: [
+        {
+          sceneNumber: 1,
+          title: "Opening",
+          location: "Modern Nigerian environment",
+          time: "Morning",
+          description:
+            `Establish the world and introduce the main character. ${cleanIdea}`,
+          action:
+            "The main character enters the environment naturally.",
+        },
+
+        {
+          sceneNumber: 2,
+          title: "The Encounter",
+          location: "Busy Nigerian street",
+          time: "Afternoon",
+          description:
+            "The main character encounters another person.",
+          action:
+            "The characters interact naturally.",
+        },
+
+        {
+          sceneNumber: 3,
+          title: "The Challenge",
+          location: "Urban Nigerian environment",
+          time: "Evening",
+          description:
+            "The central conflict becomes clear.",
+          action:
+            "The main character reacts to the situation.",
+        },
+
+        {
+          sceneNumber: 4,
+          title: "Turning Point",
+          location: "Quiet Nigerian location",
+          time: "Night",
+          description:
+            "The character makes an important decision.",
+          action:
+            "The situation changes direction.",
+        },
+
+        {
+          sceneNumber: 5,
+          title: "Resolution",
+          location: "Modern Nigerian environment",
+          time: "Morning",
+          description:
+            "The story reaches its conclusion.",
+          action:
+            "The characters move forward.",
+        },
+      ],
+
+      shots: [
+        {
+          shotNumber: 1,
+          sceneNumber: 1,
+          type: "Wide Shot",
+          camera:
+            "Slow cinematic push-in",
+          description:
+            "Establish the environment and main character.",
+          character:
+            "Main Character",
+        },
+
+        {
+          shotNumber: 2,
+          sceneNumber: 1,
+          type: "Medium Shot",
+          camera:
+            "Natural handheld movement",
+          description:
+            "Show the main character moving naturally.",
+          character:
+            "Main Character",
+        },
+
+        {
+          shotNumber: 3,
+          sceneNumber: 2,
+          type: "Two Shot",
+          camera:
+            "Eye-level cinematic camera",
+          description:
+            "Show the characters interacting.",
+          character:
+            "Main Character and Friend",
+        },
+
+        {
+          shotNumber: 4,
+          sceneNumber: 3,
+          type: "Close Up",
+          camera:
+            "Slow push-in",
+          description:
+            "Capture the emotional reaction.",
+          character:
+            "Main Character",
+        },
+
+        {
+          shotNumber: 5,
+          sceneNumber: 4,
+          type: "Over Shoulder",
+          camera:
+            "Subtle dolly movement",
+          description:
+            "Show the important conversation.",
+          character:
+            "Main Character",
+        },
+
+        {
+          shotNumber: 6,
+          sceneNumber: 5,
+          type: "Wide Cinematic",
+          camera:
+            "Slow pull-back",
+          description:
+            "End with a cinematic resolution.",
+          character:
+            "Main Character",
+        },
+      ],
+    };
+  };
+
+  /* =====================================================
+     CREATE MASTER CHARACTERS
+  ===================================================== */
+
+  const createMasterCharacters = () => {
+    return [
+      {
+        id: "character-main",
+        name: "Main Character",
+        role: "Main Character",
+        gender: "Male",
+        voiceId: "ada_pcm",
+        voiceName: "Ada",
+        voiceGender: "Female",
+        voiceStatus: "ready",
+      },
+
+      {
+        id: "character-friend",
+        name: "Friend",
+        role: "Support Character",
+        gender: "Female",
+        voiceId: "blessing_pcm",
+        voiceName: "Blessing",
+        voiceGender: "Female",
+        voiceStatus: "ready",
+      },
+
+      {
+        id: "character-rival",
+        name: "Rival",
+        role: "Rival",
+        gender: "Male",
+        voiceId: "ifeanyi_ig",
+        voiceName: "Ifeanyi",
+        voiceGender: "Male",
+        voiceStatus: "ready",
+      },
+    ];
+  };
+
+  /* =====================================================
+     CREATE MASTER DIALOGUE
+  ===================================================== */
+
+  const createMasterDialogue = (
+    story,
+    characters
+  ) => {
+    const main =
+      characters[0];
+
+    const friend =
+      characters[1];
+
+    const lines = [
+      {
+        id: `dialogue-1-${Date.now()}`,
+        sceneNumber: 1,
+        characterId: main.id,
+        characterName: main.name,
+        role: main.role,
+        text:
+          "Today, I feel like something is about to change.",
+        emotion: "thoughtful",
+        voice: main.voiceId,
+        timing: "0-5",
+        audio: null,
+      },
+
+      {
+        id: `dialogue-2-${Date.now()}`,
+        sceneNumber: 2,
+        characterId: friend.id,
+        characterName: friend.name,
+        role: friend.role,
+        text:
+          "You know say sometimes, na just one step we need to take.",
+        emotion: "encouraging",
+        voice: friend.voiceId,
+        timing: "5-10",
+        audio: null,
+      },
+
+      {
+        id: `dialogue-3-${Date.now()}`,
+        sceneNumber: 3,
+        characterId: main.id,
+        characterName: main.name,
+        role: main.role,
+        text:
+          "I no go allow fear stop me from trying.",
+        emotion: "determined",
+        voice: main.voiceId,
+        timing: "10-15",
+        audio: null,
+      },
+
+      {
+        id: `dialogue-4-${Date.now()}`,
+        sceneNumber: 4,
+        characterId: friend.id,
+        characterName: friend.name,
+        role: friend.role,
+        text:
+          "Then make we start. One small step at a time.",
+        emotion: "hopeful",
+        voice: friend.voiceId,
+        timing: "15-20",
+        audio: null,
+      },
+
+      {
+        id: `dialogue-5-${Date.now()}`,
+        sceneNumber: 5,
+        characterId: main.id,
+        characterName: main.name,
+        role: main.role,
+        text:
+          "This is only the beginning.",
+        emotion: "confident",
+        voice: main.voiceId,
+        timing: "20-23",
+        audio: null,
+      },
+    ];
+
+    return {
+      mode: "master",
+      language: "pcm",
+      storyId: story.id,
+      title: story.title,
+      lines,
+      scenes: story.scenes,
+      totalLines: lines.length,
+      estimatedDurationSec: 23,
+      createdAt:
+        new Date().toISOString(),
+    };
+  };
+
+  /* =====================================================
+     BUILD MASTER VIDEO PLAN
+  ===================================================== */
+
+  const createMasterVideoPlan = (
+    story,
+    characters,
+    dialogue
+  ) => {
+    const scenes = story.scenes || [];
+    const shots = story.shots || [];
+
+    const videoScenes =
+      scenes.map((scene) => {
+        const sceneShots =
+          shots.filter(
+            (shot) =>
+              Number(
+                shot.sceneNumber
+              ) ===
+              Number(
+                scene.sceneNumber
+              )
+          );
+
+        const sceneDialogue =
+          dialogue.lines.filter(
+            (line) =>
+              Number(
+                line.sceneNumber
+              ) ===
+              Number(
+                scene.sceneNumber
+              )
+          );
+
+        return {
+          ...scene,
+          shots: sceneShots,
+          dialogue:
+            sceneDialogue,
+        };
+      });
+
+    return {
+      mode,
+      storyId: story.id,
+      title: story.title,
+      totalScenes:
+        scenes.length,
+      totalShots:
+        shots.length,
+      voiceConnected: true,
+      soundConnected: true,
+      characters,
+      scenes: videoScenes,
+      createdAt:
+        new Date().toISOString(),
+    };
+  };
+
+  /* =====================================================
+     GENERATE BOMBA AI VOICE FOR MASTER WORKFLOW
+  ===================================================== */
+
+  const generateMasterVoice = async (
+    dialogue
+  ) => {
+    const lines =
+      dialogue?.lines || [];
+
+    const voiceText =
+      lines
+        .map(
+          (line) =>
+            line.text
+        )
+        .filter(Boolean)
+        .join(" ");
+
+    if (!voiceText.trim()) {
+      throw new Error(
+        "No dialogue was available for the voice stage."
+      );
+    }
+
+    const voiceId =
+      "ada_pcm";
+
+    const language =
+      "pcm";
+
+    setStatus(
+      "Generating BOMBA AI voice... 🎙️"
+    );
+
+    const response =
+      await fetch(
+        "/api/voice/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Accept:
+              "audio/mpeg, application/json",
+          },
+          body: JSON.stringify({
+            text: voiceText,
+            voiceId,
+            language,
+          }),
+        }
+      );
+
+    if (!response.ok) {
+      let data = {};
+
+      try {
+        data =
+          await readJsonResponse(
+            response
+          );
+      } catch {}
+
+      throw new Error(
+        getSafeErrorMessage(
+          data,
+          "BOMBA AI voice generation failed."
+        )
+      );
+    }
+
+    const audioBuffer =
+      await response.arrayBuffer();
+
+    if (!audioBuffer.byteLength) {
+      throw new Error(
+        "BOMBA AI returned an empty voice file."
+      );
+    }
+
+    const audioBlob =
+      new Blob(
+        [audioBuffer],
+        {
+          type: "audio/mpeg",
+        }
+      );
+
+    const localAudioUrl =
+      URL.createObjectURL(
+        audioBlob
+      );
+
+    let cloudinaryData = null;
+
+    const cloudName =
+      process.env
+        .NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+      "";
+
+    const uploadPreset =
+      process.env
+        .NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
+      "bomba_voice";
+
+    if (cloudName) {
+      try {
+        const formData =
+          new FormData();
+
+        formData.append(
+          "file",
+          audioBlob,
+          "bomba-master-voice.mp3"
+        );
+
+        formData.append(
+          "upload_preset",
+          uploadPreset
+        );
+
+        const cloudinaryResponse =
+          await fetch(
+            `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`,
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+        if (
+          cloudinaryResponse.ok
+        ) {
+          cloudinaryData =
+            await cloudinaryResponse.json();
+
+          if (
+            cloudinaryData?.public_id
+          ) {
+            localStorage.setItem(
+              "bomba_voice_public_id",
+              cloudinaryData.public_id
+            );
+
+            localStorage.setItem(
+              "bomba_voice_cloudinary_resource_type",
+              cloudinaryData.resource_type ||
+                "video"
+            );
+
+            localStorage.setItem(
+              "bomba_voice_language",
+              language
+            );
+
+            localStorage.setItem(
+              "bomba_voice_text",
+              voiceText
+            );
+
+            localStorage.setItem(
+              "bomba_voice_id",
+              voiceId
+            );
+          }
+        } else {
+          console.warn(
+            "BOMBA Cloudinary voice upload failed."
+          );
+        }
+      } catch (cloudinaryError) {
+        console.warn(
+          "BOMBA Cloudinary upload error:",
+          cloudinaryError
+        );
+      }
+    }
+
+    return {
+      mode: "master",
+      language,
+      voiceId,
+      voiceName: "Ada",
+      text: voiceText,
+      audioUrl: localAudioUrl,
+      cloudinary:
+        cloudinaryData,
+      status: "completed",
+      createdAt:
+        new Date().toISOString(),
+    };
+  };
+
+  /* =====================================================
+     GENERATE MASTER SOUND
+  ===================================================== */
+
+  const generateMasterSound = async () => {
+    setStatus(
+      "Generating cinematic sound... 🔊"
+    );
+
+    const soundPrompt =
+      `cinematic emotional background music for a realistic ${mode.toLowerCase()} video, natural Nigerian atmosphere, subtle professional film score`;
+
+    const duration = 23;
+
+    const response =
+      await fetch(
+        "/api/sound/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json",
+          },
+          body: JSON.stringify({
+            type: "Background Music",
+            prompt:
+              soundPrompt,
+            duration,
+          }),
+        }
+      );
+
+    const data =
+      await readJsonResponse(
+        response
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        getSafeErrorMessage(
+          data,
+          "BOMBA AI sound generation failed."
+        )
+      );
+    }
+
+    return {
+      type: "Background Music",
+      prompt: soundPrompt,
+      duration,
+      audioUrl:
+        data?.audioUrl ||
+        data?.audio_url ||
+        null,
+      status:
+        data?.audioUrl ||
+        data?.audio_url
+          ? "completed"
+          : "processing",
+      createdAt:
+        new Date().toISOString(),
+    };
+  };
+
+  /* =====================================================
+     FINALIZE VIDEO WITH BOMBA VOICE
   ===================================================== */
 
   const finalizeVideoWithVoice = async (
@@ -263,7 +928,7 @@ export default function Home() {
 
     if (!voicePublicId) {
       console.log(
-        "BOMBA: No saved Cloudinary voice found. Keeping original video."
+        "BOMBA: No Cloudinary voice found. Keeping original video."
       );
 
       return generatedVideoUrl;
@@ -273,42 +938,34 @@ export default function Home() {
       "Video ready. Adding your BOMBA AI voice... 🎙️"
     );
 
-    console.log(
-      "BOMBA FINALIZE START:",
-      {
-        generatedVideoUrl,
-        voicePublicId,
-      }
-    );
-
-    const finalizeResponse = await fetch(
-      "/api/video/finalize",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          videoUrl: generatedVideoUrl,
-          voicePublicId: voicePublicId,
-        }),
-      }
-    );
+    const finalizeResponse =
+      await fetch(
+        "/api/video/finalize",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json",
+          },
+          body: JSON.stringify({
+            videoUrl:
+              generatedVideoUrl,
+            voicePublicId,
+          }),
+        }
+      );
 
     const finalizeData =
       await readJsonResponse(
         finalizeResponse
       );
 
-    console.log(
-      "BOMBA FINALIZE RESPONSE:",
-      finalizeData
-    );
-
     if (
       !finalizeResponse.ok ||
-      finalizeData?.status !== "completed" ||
+      finalizeData?.status !==
+        "completed" ||
       !finalizeData?.videoUrl
     ) {
       throw new Error(
@@ -319,58 +976,122 @@ export default function Home() {
       );
     }
 
-    console.log(
-      "BOMBA FINAL VIDEO READY:",
-      finalizeData.videoUrl
-    );
-
     return finalizeData.videoUrl;
+  };
+
+  /* =====================================================
+     COMPLETE FINAL PRODUCTION STAGES
+  ===================================================== */
+
+  const completeFinalStages = (
+    finalVideoUrl,
+    production
+  ) => {
+    try {
+      const timelineData = {
+        videoUrl:
+          finalVideoUrl,
+        video:
+          production?.video?.data ||
+          null,
+        voices:
+          production?.voices?.data ||
+          null,
+        sound:
+          production?.sound?.data ||
+          null,
+        status: "completed",
+        createdAt:
+          new Date().toISOString(),
+      };
+
+      const afterTimeline =
+        markStage(
+          "timeline",
+          timelineData
+        );
+
+      const previewData = {
+        videoUrl:
+          finalVideoUrl,
+        timeline:
+          afterTimeline?.timeline?.data ||
+          timelineData,
+        status: "completed",
+        createdAt:
+          new Date().toISOString(),
+      };
+
+      const afterPreview =
+        markStage(
+          "preview",
+          previewData
+        );
+
+      markStage(
+        "export",
+        {
+          videoUrl:
+            finalVideoUrl,
+          preview:
+            afterPreview?.preview?.data ||
+            previewData,
+          status: "completed",
+          exportedAt:
+            new Date().toISOString(),
+        }
+      );
+    } catch (stageError) {
+      console.error(
+        "BOMBA FINAL STAGES ERROR:",
+        stageError
+      );
+    }
   };
 
   /* =====================================================
      CHECK VIDEO
   ===================================================== */
 
-  const pollVideo = async (predictionId) => {
+  const pollVideo = async (
+    predictionId
+  ) => {
     const controller = {
       cancelled: false,
     };
 
     stopPolling();
 
-    pollingRef.current = controller;
+    pollingRef.current =
+      controller;
 
     const maxAttempts = 20;
-    const startedAt = Date.now();
+    const startedAt =
+      Date.now();
 
     for (
       let attempts = 1;
       attempts <= maxAttempts;
       attempts++
     ) {
-      if (controller.cancelled) {
+      if (
+        controller.cancelled
+      ) {
         return;
       }
 
       try {
-        const elapsedSeconds = Math.floor(
-          (Date.now() - startedAt) / 1000
-        );
-
-        if (attempts === 1) {
-          setStatus(
-            "Connecting to Eternal AI... 🎬 0 sec"
+        const elapsedSeconds =
+          Math.floor(
+            (Date.now() -
+              startedAt) /
+              1000
           );
-        } else {
-          setStatus(
-            `Eternal AI is still generating your video... ${elapsedSeconds} sec`
-          );
-        }
 
-        console.log(
-          "BOMBA ETERNAL AI STATUS CHECK:",
-          attempts,
-          predictionId
+        setStatus(
+          attempts === 1
+            ? "Connecting to Eternal AI... 🎬 0 sec"
+            : `Eternal AI is still generating your video... ${elapsedSeconds} sec`
         );
 
         const pollUrl =
@@ -378,38 +1099,34 @@ export default function Home() {
             predictionId
           )}`;
 
-        console.log(
-          "BOMBA ETERNAL AI POLL URL:",
-          pollUrl
-        );
+        const res =
+          await fetch(
+            pollUrl,
+            {
+              method: "GET",
+              cache:
+                "no-store",
+              headers: {
+                Accept:
+                  "application/json, video/*",
+              },
+            }
+          );
 
-        const res = await fetch(
-          pollUrl,
-          {
-            method: "GET",
-            cache: "no-store",
-            headers: {
-              Accept:
-                "application/json, video/*",
-            },
-          }
-        );
-
-        if (controller.cancelled) {
+        if (
+          controller.cancelled
+        ) {
           return;
         }
 
         const contentType =
-          res.headers.get("content-type") || "";
+          res.headers.get(
+            "content-type"
+          ) || "";
 
-        console.log(
-          "BOMBA ETERNAL AI POLL CONTENT TYPE:",
-          contentType
-        );
-
-        /* ===============================================
-           VIDEO DIRECTLY RETURNED
-        =============================================== */
+        /* =============================================
+           DIRECT VIDEO
+        ============================================= */
 
         if (
           res.ok &&
@@ -431,28 +1148,29 @@ export default function Home() {
               videoBlob
             );
 
-          console.log(
-            "BOMBA VIDEO BLOB READY:",
-            generatedVideoUrl,
-            videoBlob.size
+          const finalVideoUrl =
+            await finalizeVideoWithVoice(
+              generatedVideoUrl
+            );
+
+          completeFinalStages(
+            finalVideoUrl,
+            null
           );
 
-          if (
-            pollingRef.current === controller
-          ) {
-            pollingRef.current = null;
-          }
-
           setVideoUrl(
-            generatedVideoUrl
+            finalVideoUrl
           );
 
           setStatus(
-            "Video ready! 🎬"
+            "Production complete! 🎬🎙️🔊"
           );
 
           setError("");
           setLoading(false);
+
+          pollingRef.current =
+            null;
 
           return;
         }
@@ -461,188 +1179,140 @@ export default function Home() {
 
         try {
           data =
-            await readJsonResponse(res);
-        } catch (parseError) {
-          console.error(
-            "BOMBA STATUS RESPONSE ERROR:",
-            parseError
-          );
-
+            await readJsonResponse(
+              res
+            );
+        } catch (
+          parseError
+        ) {
           if (
             attempts <
             maxAttempts
           ) {
-            setStatus(
-              "Eternal AI is processing the video... reconnecting..."
+            await wait(
+              3000
             );
 
-            await wait(3000);
             continue;
           }
 
           throw parseError;
         }
 
-        if (
-          !data ||
-          typeof data !== "object"
-        ) {
-          console.error(
-            "BOMBA EMPTY STATUS DATA:",
+        const returnedVideoUrl =
+          extractVideoUrl(
             data
           );
 
-          if (
-            attempts <
-            maxAttempts
-          ) {
-            setStatus(
-              "Eternal AI is processing the video... reconnecting..."
-            );
-
-            await wait(3000);
-            continue;
-          }
-
-          throw new Error(
-            "Eternal AI returned an empty status response."
-          );
-        }
-
-        console.log(
-          "BOMBA ETERNAL AI VIDEO STATUS:",
-          data
-        );
-
-        /* ===============================================
-           VIDEO READY AS JSON
-        =============================================== */
-
-        const returnedVideoUrl =
-          extractVideoUrl(data);
+        /* =============================================
+           JSON VIDEO
+        ============================================= */
 
         if (
           res.ok &&
           returnedVideoUrl
         ) {
-          console.log(
-            "BOMBA VIDEO READY:",
-            returnedVideoUrl
-          );
-
-          if (
-            pollingRef.current === controller
-          ) {
-            pollingRef.current = null;
-          }
-
           const finalVideoUrl =
             await finalizeVideoWithVoice(
               returnedVideoUrl
             );
+
+          completeFinalStages(
+            finalVideoUrl,
+            null
+          );
 
           setVideoUrl(
             finalVideoUrl
           );
 
           setStatus(
-            "Video ready with BOMBA AI voice! 🎬🎙️"
+            "Production complete! 🎬🎙️🔊"
           );
 
           setError("");
           setLoading(false);
 
+          pollingRef.current =
+            null;
+
           return;
         }
 
-        /* ===============================================
-           NORMALIZE STATUS
-        =============================================== */
-
         const currentStatus =
-          typeof data.status === "string"
+          typeof data.status ===
+          "string"
             ? data.status.toLowerCase()
             : "";
 
-        /* ===============================================
-           GENERATION FAILED
-        =============================================== */
+        /* =============================================
+           FAILED
+        ============================================= */
 
         if (
-          currentStatus === "failed" ||
-          currentStatus === "error" ||
-          currentStatus === "canceled" ||
-          currentStatus === "cancelled"
+          currentStatus ===
+            "failed" ||
+          currentStatus ===
+            "error" ||
+          currentStatus ===
+            "canceled" ||
+          currentStatus ===
+            "cancelled"
         ) {
-          const failedMessage =
+          throw new Error(
             getSafeErrorMessage(
               data,
               "Eternal AI video generation failed."
-            );
-
-          const failedError =
-            new Error(
-              failedMessage
-            );
-
-          failedError.retryable = false;
-
-          throw failedError;
+            )
+          );
         }
 
-        /* ===============================================
+        /* =============================================
            EXPIRED
-        =============================================== */
+        ============================================= */
 
         if (
-          res.status === 410 ||
-          currentStatus === "expired"
+          res.status ===
+            410 ||
+          currentStatus ===
+            "expired"
         ) {
-          const expiredMessage =
+          throw new Error(
             getSafeErrorMessage(
               data,
-              "The Eternal AI generation request expired or is no longer available."
-            );
-
-          const expiredError =
-            new Error(
-              expiredMessage
-            );
-
-          expiredError.retryable = false;
-
-          throw expiredError;
+              "The Eternal AI generation request expired."
+            )
+          );
         }
 
-        /* ===============================================
-           STILL PROCESSING
-        =============================================== */
+        /* =============================================
+           PROCESSING
+        ============================================= */
 
         if (
-          currentStatus === "processing" ||
-          currentStatus === "queued" ||
-          currentStatus === "in_queue" ||
-          currentStatus === "in_progress" ||
-          currentStatus === "pending" ||
-          currentStatus === "started" ||
-          res.status === 202
+          currentStatus ===
+            "processing" ||
+          currentStatus ===
+            "queued" ||
+          currentStatus ===
+            "in_queue" ||
+          currentStatus ===
+            "in_progress" ||
+          currentStatus ===
+            "pending" ||
+          currentStatus ===
+            "started" ||
+          res.status ===
+            202
         ) {
           if (
             attempts <
             maxAttempts
           ) {
-            const currentSeconds =
-              Math.floor(
-                (Date.now() -
-                  startedAt) /
-                  1000
-              );
-
-            setStatus(
-              `Eternal AI is still generating your video... ${currentSeconds} sec`
+            await wait(
+              3000
             );
 
-            await wait(3000);
             continue;
           }
 
@@ -651,47 +1321,23 @@ export default function Home() {
           );
         }
 
-        /* ===============================================
-           HTTP ERROR
-        =============================================== */
-
         if (!res.ok) {
-          const httpMessage =
+          throw new Error(
             getSafeErrorMessage(
               data,
               `Unable to check video status (${res.status}).`
-            );
-
-          throw new Error(
-            httpMessage
+            )
           );
         }
-
-        /* ===============================================
-           UNKNOWN RESPONSE
-        =============================================== */
-
-        console.warn(
-          "BOMBA UNKNOWN ETERNAL AI RESPONSE:",
-          data
-        );
 
         if (
           attempts <
           maxAttempts
         ) {
-          const currentSeconds =
-            Math.floor(
-              (Date.now() -
-                startedAt) /
-                1000
-            );
-
-          setStatus(
-            `Eternal AI is processing your video... ${currentSeconds} sec`
+          await wait(
+            3000
           );
 
-          await wait(3000);
           continue;
         }
 
@@ -704,69 +1350,29 @@ export default function Home() {
           err
         );
 
-        if (controller.cancelled) {
-          return;
-        }
-
-        /* ===============================================
-           FINAL ERRORS
-        =============================================== */
-
         if (
-          err?.retryable === false
+          controller.cancelled
         ) {
-          if (
-            pollingRef.current ===
-            controller
-          ) {
-            pollingRef.current = null;
-          }
-
-          setError(
-            getSafeErrorMessage(
-              {
-                error:
-                  err?.message,
-              },
-              "Eternal AI video generation failed."
-            )
-          );
-
-          setStatus("");
-          setLoading(false);
-
           return;
         }
-
-        /* ===============================================
-           TEMPORARY CONNECTION PROBLEMS
-        =============================================== */
 
         if (
           attempts <
           maxAttempts
         ) {
-          const currentSeconds =
-            Math.floor(
-              (Date.now() -
-                startedAt) /
-                1000
-            );
-
           setStatus(
-            `Eternal AI is still working... reconnecting... ${currentSeconds} sec`
+            "Eternal AI is still working... reconnecting..."
           );
 
-          await wait(3000);
+          await wait(
+            3000
+          );
+
           continue;
         }
 
-        if (
-          pollingRef.current ===
-          controller
-        ) {
-          pollingRef.current = null;
-        }
+        pollingRef.current =
+          null;
 
         setError(
           getSafeErrorMessage(
@@ -785,12 +1391,8 @@ export default function Home() {
       }
     }
 
-    if (
-      pollingRef.current ===
-      controller
-    ) {
-      pollingRef.current = null;
-    }
+    pollingRef.current =
+      null;
 
     setError(
       "The video is taking longer than expected. Please try again shortly."
@@ -801,50 +1403,406 @@ export default function Home() {
   };
 
   /* =====================================================
-     GENERATE VIDEO
+     MASTER PRODUCTION WORKFLOW
   ===================================================== */
 
-  const handleGenerateVideo =
+  const runMasterProduction =
     async () => {
-      if (!prompt.trim()) {
-        setError(
+      const cleanIdea =
+        prompt.trim();
+
+      if (!cleanIdea) {
+        throw new Error(
           "Please describe your video first."
         );
-        return;
       }
 
       if (!characterImage) {
-        setError(
+        throw new Error(
           "Please upload a picture first."
         );
-        return;
       }
 
-      stopPolling();
-
-      setLoading(true);
-      setError("");
-      setVideoUrl(null);
-      setStatus(
-        "Preparing your realistic video..."
+      console.log(
+        "======================================"
       );
 
-      try {
-        const realisticPrompt = `
-Photorealistic live-action video, cinematic quality, natural lighting, real human skin texture, realistic body movement, natural environment, no cartoon, no anime, no illustration style.
+      console.log(
+        "BOMBA MASTER PRODUCTION START"
+      );
 
-Mode: ${mode}
+      console.log(
+        "======================================"
+      );
 
-User idea:
-${prompt}
-`.trim();
+      /* =============================================
+         IDEA
+      ============================================= */
 
-        console.log(
-          "BOMBA GENERATING MODE:",
-          mode
+      setStatus(
+        "01/12 — Saving your idea... 💡"
+      );
+
+      let production =
+        initializeProduction(
+          cleanIdea
         );
 
-        const res = await fetch(
+      production =
+        markStage(
+          "idea",
+          {
+            prompt:
+              cleanIdea,
+            mode,
+            characterImage,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         STORY / PLAN
+      ============================================= */
+
+      setStatus(
+        "02/12 — Building your story and plan... 📋"
+      );
+
+      const story =
+        createMasterStory(
+          cleanIdea
+        );
+
+      production =
+        markStage(
+          "story",
+          {
+            mode,
+            plan: story,
+            idea: cleanIdea,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         CHARACTERS
+      ============================================= */
+
+      setStatus(
+        "03/12 — Creating characters... 👤"
+      );
+
+      const characters =
+        createMasterCharacters();
+
+      production =
+        markStage(
+          "characters",
+          {
+            mode,
+            language: "pcm",
+            characters,
+            totalCharacters:
+              characters.length,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         DIALOGUE
+      ============================================= */
+
+      setStatus(
+        "04/12 — Writing dialogue... 💬"
+      );
+
+      const dialogue =
+        createMasterDialogue(
+          story,
+          characters
+        );
+
+      production =
+        markStage(
+          "dialogue",
+          {
+            ...dialogue,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         SCENES
+      ============================================= */
+
+      setStatus(
+        "05/12 — Preparing scenes... 🎬"
+      );
+
+      production =
+        markStage(
+          "scenes",
+          {
+            mode,
+            storyId:
+              story.id,
+            scenes:
+              story.scenes,
+            totalScenes:
+              story.scenes.length,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         SHOTS
+      ============================================= */
+
+      setStatus(
+        "06/12 — Preparing cinematic shots... 📷"
+      );
+
+      production =
+        markStage(
+          "shots",
+          {
+            mode,
+            storyId:
+              story.id,
+            shots:
+              story.shots,
+            totalShots:
+              story.shots.length,
+            createdAt:
+              new Date().toISOString(),
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         VOICE
+      ============================================= */
+
+      setStatus(
+        "07/12 — Generating AI voice... 🎙️"
+      );
+
+      let voiceData;
+
+      try {
+        voiceData =
+          await generateMasterVoice(
+            dialogue
+          );
+
+        production =
+          markStage(
+            "voices",
+            voiceData
+          ) ||
+          production;
+      } catch (voiceError) {
+        console.error(
+          "BOMBA MASTER VOICE ERROR:",
+          voiceError
+        );
+
+        /*
+         * Voice is important, but we don't kill
+         * the entire production if the voice API
+         * temporarily fails.
+         */
+        production =
+          markStage(
+            "voices",
+            {
+              status:
+                "failed",
+              error:
+                voiceError?.message ||
+                "Voice generation failed.",
+              createdAt:
+                new Date().toISOString(),
+            }
+          ) ||
+          production;
+      }
+
+      /* =============================================
+         SOUND
+      ============================================= */
+
+      setStatus(
+        "08/12 — Generating cinematic sound... 🔊"
+      );
+
+      let soundData;
+
+      try {
+        soundData =
+          await generateMasterSound();
+
+        production =
+          markStage(
+            "sound",
+            soundData
+          ) ||
+          production;
+      } catch (soundError) {
+        console.error(
+          "BOMBA MASTER SOUND ERROR:",
+          soundError
+        );
+
+        production =
+          markStage(
+            "sound",
+            {
+              status:
+                "failed",
+              error:
+                soundError?.message ||
+                "Sound generation failed.",
+              createdAt:
+                new Date().toISOString(),
+            }
+          ) ||
+          production;
+      }
+
+      /* =============================================
+         VIDEO PLAN
+      ============================================= */
+
+      setStatus(
+        "09/12 — Connecting scenes, shots, dialogue, voice and sound... 🎥"
+      );
+
+      const videoPlan =
+        createMasterVideoPlan(
+          story,
+          characters,
+          dialogue
+        );
+
+      production =
+        markStage(
+          "video",
+          {
+            ...videoPlan,
+            status:
+              "ready",
+          }
+        ) ||
+        production;
+
+      /* =============================================
+         TIMELINE PREPARATION
+      ============================================= */
+
+      setStatus(
+        "10/12 — Preparing production timeline... ⏱️"
+      );
+
+      /*
+       * The actual timeline is finalized after
+       * Eternal AI returns the video.
+       */
+
+      /* =============================================
+         ETERNAL AI VIDEO
+      ============================================= */
+
+      setStatus(
+        "11/12 — Sending the complete production to Eternal AI... 🎬"
+      );
+
+      const realisticPrompt = `
+Photorealistic live-action cinematic video.
+
+No cartoon.
+No anime.
+No illustration.
+No CGI-looking humans.
+
+Natural human skin texture.
+Realistic body movement.
+Natural facial expressions.
+Natural lighting.
+Realistic Nigerian environment.
+Professional cinematic camera movement.
+
+Mode:
+${mode}
+
+Original idea:
+${cleanIdea}
+
+Story:
+${story.logline}
+
+Beginning:
+${story.beginning}
+
+Middle:
+${story.middle}
+
+Conflict:
+${story.conflict}
+
+Turning point:
+${story.turningPoint}
+
+Ending:
+${story.ending}
+
+Characters:
+${characters
+  .map(
+    (character) =>
+      `${character.name}: ${character.role}`
+  )
+  .join("\n")}
+
+Scenes:
+${story.scenes
+  .map(
+    (scene) =>
+      `Scene ${scene.sceneNumber}: ${scene.title}. ${scene.description}`
+  )
+  .join("\n")}
+
+Cinematic shots:
+${story.shots
+  .map(
+    (shot) =>
+      `Shot ${shot.shotNumber}, Scene ${shot.sceneNumber}: ${shot.type}. ${shot.description}. Camera: ${shot.camera}`
+  )
+  .join("\n")}
+
+Dialogue:
+${dialogue.lines
+  .map(
+    (line) =>
+      `${line.characterName}: ${line.text}`
+  )
+  .join("\n")}
+
+Create a coherent cinematic video based on the production plan above.
+`.trim();
+
+      const res =
+        await fetch(
           "/api/video/generate",
           {
             method: "POST",
@@ -859,6 +1817,7 @@ ${prompt}
 
             body: JSON.stringify({
               mode,
+
               prompt:
                 realisticPrompt,
 
@@ -867,136 +1826,147 @@ ${prompt}
 
               characterImage:
                 characterImage,
+
+              /*
+               * These fields allow the API route
+               * to use the structured production
+               * when it supports them.
+               */
+              production: {
+                idea: cleanIdea,
+
+                story,
+
+                characters,
+
+                dialogue,
+
+                scenes:
+                  story.scenes,
+
+                shots:
+                  story.shots,
+
+                voice:
+                  voiceData ||
+                  null,
+
+                sound:
+                  soundData ||
+                  null,
+
+                video:
+                  videoPlan,
+              },
             }),
           }
         );
 
-        let data;
+      let data;
 
-        try {
-          data =
-            await readJsonResponse(
-              res
-            );
-        } catch (
-          parseError
-        ) {
-          console.error(
-            "BOMBA GENERATE RESPONSE ERROR:",
-            parseError
+      try {
+        data =
+          await readJsonResponse(
+            res
           );
-
-          throw new Error(
-            parseError?.message ||
-              "The video server returned an invalid response."
-          );
-        }
-
-        if (
-          !data ||
-          typeof data !==
-            "object"
-        ) {
-          console.error(
-            "BOMBA GENERATE EMPTY DATA:",
-            data
-          );
-
-          throw new Error(
-            "The video server returned an empty response."
-          );
-        }
-
-        console.log(
-          "BOMBA GENERATE RESPONSE:",
-          data
+      } catch (
+        parseError
+      ) {
+        throw new Error(
+          parseError?.message ||
+            "The video server returned an invalid response."
         );
+      }
 
-        if (!res.ok) {
-          throw new Error(
-            getSafeErrorMessage(
-              data,
-              "Failed to generate video."
-            )
-          );
-        }
-
-        /* ===============================================
-           VIDEO ALREADY AVAILABLE
-        =============================================== */
-
-        const directVideoUrl =
-          extractVideoUrl(data);
-
-        if (
-          directVideoUrl
-        ) {
-          console.log(
-            "BOMBA DIRECT VIDEO URL:",
-            directVideoUrl
-          );
-
-          const finalVideoUrl =
-            await finalizeVideoWithVoice(
-              directVideoUrl
-            );
-
-          setVideoUrl(
-            finalVideoUrl
-          );
-
-          setStatus(
-            "Video ready with BOMBA AI voice! 🎬🎙️"
-          );
-
-          setError("");
-          setLoading(false);
-
-          return;
-        }
-
-        /* ===============================================
-           JOB CREATED
-        =============================================== */
-
-        const jobId =
-          extractJobId(data);
-
-        if (jobId) {
-          console.log(
-            "BOMBA ETERNAL AI JOB:",
-            jobId
-          );
-
-          setStatus(
-            "Eternal AI has started generating your video... 🎬"
-          );
-
-          await pollVideo(
-            jobId
-          );
-
-          return;
-        }
-
-        /* ===============================================
-           NO JOB / NO VIDEO
-        =============================================== */
-
-        console.error(
-          "BOMBA NO JOB RESPONSE:",
-          data
-        );
-
+      if (!res.ok) {
         throw new Error(
           getSafeErrorMessage(
             data,
-            "No video job or video URL was returned by the video server."
+            "Failed to generate video."
           )
         );
+      }
+
+      console.log(
+        "BOMBA MASTER VIDEO RESPONSE:",
+        data
+      );
+
+      /* =============================================
+         DIRECT VIDEO
+      ============================================= */
+
+      const directVideoUrl =
+        extractVideoUrl(data);
+
+      if (directVideoUrl) {
+        const finalVideoUrl =
+          await finalizeVideoWithVoice(
+            directVideoUrl
+          );
+
+        completeFinalStages(
+          finalVideoUrl,
+          production
+        );
+
+        setVideoUrl(
+          finalVideoUrl
+        );
+
+        setStatus(
+          "12/12 — BOMBA production complete! 🎬🎙️🔊"
+        );
+
+        return finalVideoUrl;
+      }
+
+      /* =============================================
+         VIDEO JOB
+      ============================================= */
+
+      const jobId =
+        extractJobId(data);
+
+      if (jobId) {
+        setStatus(
+          "Eternal AI has started generating your complete video... 🎬"
+        );
+
+        await pollVideo(
+          jobId
+        );
+
+        return null;
+      }
+
+      throw new Error(
+        getSafeErrorMessage(
+          data,
+          "No video job or video URL was returned by the video server."
+        )
+      );
+    };
+
+  /* =====================================================
+     MAIN GENERATE BUTTON
+  ===================================================== */
+
+  const handleGenerateVideo =
+    async () => {
+      if (loading) return;
+
+      stopPolling();
+
+      setLoading(true);
+      setError("");
+      setVideoUrl(null);
+
+      try {
+        await runMasterProduction();
       } catch (err) {
         console.error(
-          "BOMBA GENERATE ERROR:",
+          "BOMBA MASTER PRODUCTION ERROR:",
           err
         );
 
@@ -1006,7 +1976,7 @@ ${prompt}
               error:
                 err?.message,
             },
-            "Something went wrong while generating the video."
+            "Something went wrong while creating your BOMBA production."
           )
         );
 
@@ -1065,11 +2035,6 @@ ${prompt}
           .single();
 
         if (error) {
-          console.error(
-            "BOMBA API KEY ERROR:",
-            error
-          );
-
           throw new Error(
             error.message ||
               "Unable to create API Key."
@@ -1149,7 +2114,6 @@ ${prompt}
 
   return (
     <main>
-
       {/* =================================================
           TOP BAR
       ================================================= */}
@@ -1443,7 +2407,6 @@ ${prompt}
       ================================================= */}
 
       <section className="studioCard">
-
         <h2>
           What do you want to create?
         </h2>
@@ -1469,12 +2432,9 @@ ${prompt}
           )}
         </div>
 
-        {/* ===============================================
-            CHARACTER
-        =============================================== */}
+        {/* CHARACTER */}
 
         <div className="characterUpload">
-
           <div className="characterHeader">
             <div>
               <h3>
@@ -1490,7 +2450,6 @@ ${prompt}
 
           {!characterImage ? (
             <label className="uploadBox">
-
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1512,18 +2471,15 @@ ${prompt}
               <span>
                 PNG, JPG or WEBP · Maximum 10MB
               </span>
-
             </label>
           ) : (
             <div className="characterPreview">
-
               <img
                 src={characterImage}
                 alt="Your BOMBA character"
               />
 
               <div className="characterPreviewInfo">
-
                 <strong>
                   ✅ Character Photo Added
                 </strong>
@@ -1534,9 +2490,7 @@ ${prompt}
                 </span>
 
                 <div className="characterActions">
-
                   <label className="changePhoto">
-
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -1558,19 +2512,15 @@ ${prompt}
                   >
                     Remove
                   </button>
-
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ===============================================
-            PROMPT
-        =============================================== */}
+        {/* PROMPT */}
 
         <div className="promptBox">
-
           <label>
             Describe your video
           </label>
@@ -1586,7 +2536,6 @@ ${prompt}
           />
 
           <div className="promptFooter">
-
             <span>
               {prompt.length} characters
             </span>
@@ -1600,16 +2549,13 @@ ${prompt}
               disabled={loading}
             >
               {loading
-                ? "Generating..."
+                ? "Producing..."
                 : "🎬 Generate Video"}
             </button>
-
           </div>
         </div>
 
-        {/* ===============================================
-            STATUS
-        =============================================== */}
+        {/* MASTER STATUS */}
 
         {status && (
           <div
@@ -1617,15 +2563,14 @@ ${prompt}
               marginTop: "16px",
               color: "#facc15",
               fontSize: "14px",
+              lineHeight: "1.6",
             }}
           >
             {status}
           </div>
         )}
 
-        {/* ===============================================
-            ERROR
-        =============================================== */}
+        {/* ERROR */}
 
         {error && (
           <div
@@ -1644,9 +2589,7 @@ ${prompt}
           </div>
         )}
 
-        {/* ===============================================
-            VIDEO RESULT
-        =============================================== */}
+        {/* VIDEO RESULT */}
 
         {videoUrl && (
           <div
@@ -1707,14 +2650,15 @@ ${prompt}
             </div>
           </div>
         )}
-
       </section>
 
       {/* =================================================
           PLAN
       ================================================= */}
 
-      <PlanPanel idea={prompt} />
+      <PlanPanel
+        idea={prompt}
+      />
 
       {/* =================================================
           BOMBA AI STUDIO BOARD
@@ -1727,13 +2671,11 @@ ${prompt}
       ================================================= */}
 
       <section className="workflow">
-
         <h2>
           Production Workflow
         </h2>
 
         <div className="workflowGrid">
-
           <div>
             <strong>
               01
@@ -1789,7 +2731,6 @@ ${prompt}
               Generate cinematic video clips.
             </p>
           </div>
-
         </div>
       </section>
 
@@ -1798,13 +2739,11 @@ ${prompt}
       ================================================= */}
 
       <section className="future">
-
         <h2>
           Coming into the Studio
         </h2>
 
         <div className="featureList">
-
           <span>
             🎭 Consistent Characters
           </span>
@@ -1836,11 +2775,8 @@ ${prompt}
           <span>
             📺 Full Episodes
           </span>
-
         </div>
-
       </section>
-
     </main>
   );
 }
