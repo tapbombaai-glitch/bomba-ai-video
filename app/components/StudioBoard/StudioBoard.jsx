@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   initializeProduction,
@@ -8,6 +8,10 @@ import {
   subscribeToProduction,
   changeStage,
 } from "../../../lib/bomba/productionStore";
+
+/* =========================================================
+   BOMBA AI — STUDIO BOARD
+   ========================================================= */
 
 const modules = [
   { number: "01", name: "IDEA", icon: "💡" },
@@ -49,9 +53,33 @@ const CLOUDINARY_VOICE_PRESET =
   process.env.NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
   "bomba_voice";
 
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeText(value, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function makeId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+/* =========================================================
+   CLOUDINARY VOICE UPLOAD
+   ========================================================= */
+
 async function uploadVoiceToCloudinary(audioBlob) {
   if (!CLOUDINARY_CLOUD_NAME) {
-    throw new Error("Cloudinary Cloud Name is not configured.");
+    throw new Error(
+      "Cloudinary Cloud Name is not configured."
+    );
   }
 
   const uploadUrl =
@@ -61,8 +89,16 @@ async function uploadVoiceToCloudinary(audioBlob) {
 
   const formData = new FormData();
 
-  formData.append("file", audioBlob, "bomba-voice.mp3");
-  formData.append("upload_preset", CLOUDINARY_VOICE_PRESET);
+  formData.append(
+    "file",
+    audioBlob,
+    "bomba-voice.mp3"
+  );
+
+  formData.append(
+    "upload_preset",
+    CLOUDINARY_VOICE_PRESET
+  );
 
   const response = await fetch(uploadUrl, {
     method: "POST",
@@ -97,253 +133,249 @@ async function uploadVoiceToCloudinary(audioBlob) {
 }
 
 /* =========================================================
-   BOMBA TEST STORY ENGINE
-   No OpenAI call.
-========================================================= */
+   TEST STORY
+   ========================================================= */
 
 function createTestStoryFromIdea(idea) {
-  const cleanIdea = idea.trim();
+  const cleanIdea = safeText(idea).trim();
+
+  if (!cleanIdea) {
+    throw new Error(
+      "Please enter an IDEA before building the story."
+    );
+  }
 
   const characters = [
     {
-      id: "character-001",
+      id: "character-daniel",
       name: "Daniel",
       role: "Main Character",
       gender: "Male",
-      description:
-        "A determined young man trying to turn his idea into a successful reality.",
-      goal: "Prove that his idea can work.",
-      conflict:
-        "Limited resources and pressure from people around him.",
       voiceSlot: "VOICE_A",
     },
     {
-      id: "character-002",
+      id: "character-sarah",
       name: "Sarah",
       role: "Support Character",
       gender: "Female",
-      description:
-        "A close friend who believes in Daniel and challenges his decisions.",
-      goal: "Help Daniel make the right choices.",
-      conflict:
-        "She worries that Daniel is taking too many risks.",
       voiceSlot: "VOICE_B",
     },
     {
-      id: "character-003",
+      id: "character-michael",
       name: "Michael",
       role: "Rival",
       gender: "Male",
-      description:
-        "A confident competitor who wants to succeed using his own approach.",
-      goal: "Beat Daniel and prove himself.",
-      conflict:
-        "His ambition creates tension between the characters.",
       voiceSlot: "VOICE_C",
     },
     {
-      id: "character-004",
+      id: "character-amara",
       name: "Amara",
       role: "Friend",
       gender: "Female",
-      description:
-        "A practical friend who helps the group see another solution.",
-      goal: "Keep the team focused.",
-      conflict:
-        "She must decide when to challenge the others.",
       voiceSlot: "VOICE_D",
     },
     {
-      id: "character-005",
+      id: "character-chief-okoro",
       name: "Chief Okoro",
       role: "Mentor",
       gender: "Male",
-      description:
-        "An experienced older mentor who gives the characters important advice.",
-      goal: "Help the younger generation avoid unnecessary mistakes.",
-      conflict:
-        "The younger characters do not always listen to his warnings.",
       voiceSlot: "VOICE_E",
     },
   ];
 
   const story = {
-    id: `test-story-${Date.now()}`,
+    id: makeId("test-story"),
     mode: "test",
     title: "The Idea That Could Change Everything",
+
     logline:
-      `A young creator fights to turn this idea into reality: ${cleanIdea}`,
+      `Daniel has an idea that could change his future, but fear, doubt and opposition threaten to stop him before he begins. ${cleanIdea}`,
+
     genre: "Drama / Inspirational",
     setting: "Modern Nigeria",
+
     beginning:
-      `The story begins with Daniel deciding to act on the idea: ${cleanIdea}`,
+      "Daniel discovers an idea that he believes can change his life and help the people around him. He is excited but afraid of failure.",
+
     middle:
-      "The plan becomes more difficult than expected. Pressure, doubt and competition force the characters to make important decisions.",
+      "Sarah encourages Daniel to begin with what he has. As Daniel develops the idea, Michael challenges him and creates doubt.",
+
     conflict:
-      "Daniel must overcome limited resources, pressure and opposition while keeping the original vision alive.",
+      "Daniel faces criticism, limited resources and pressure to abandon the idea.",
+
     turningPoint:
-      "The characters discover that working together gives them a better chance of succeeding.",
+      "Daniel realizes that waiting for perfect conditions is the real obstacle. He chooses to take the first serious step.",
+
     ending:
-      "The group takes one final step forward, turning the original idea into a real opportunity.",
+      "Daniel begins the journey. The result is not immediate success, but the first step proves that the idea is worth pursuing.",
+
     themes: [
       "Courage",
       "Persistence",
-      "Friendship",
-      "Opportunity",
-      "Teamwork",
+      "Hope",
+      "Self-belief",
+      "Taking the first step",
     ],
+
     characters,
+
     scenes: [
       {
         sceneNumber: 1,
         title: "The Idea",
-        location: "Daniel's workspace",
+        location: "Daniel's Room",
         time: "Morning",
         description:
-          "Daniel explains the idea and decides to take the first step.",
-        purpose: "Introduce the main character and central idea.",
+          "Daniel sits alone thinking about an idea that could change his future.",
+        purpose: "Introduce Daniel and the central idea.",
       },
       {
         sceneNumber: 2,
-        title: "The Challenge",
-        location: "A busy Nigerian city",
+        title: "A Friend's Advice",
+        location: "Small Local Cafe",
         time: "Afternoon",
         description:
-          "The first major problem appears and the plan becomes difficult.",
-        purpose: "Introduce the central conflict.",
+          "Daniel explains the idea to Sarah, who encourages him to start small.",
+        purpose: "Give Daniel confidence and introduce support.",
       },
       {
         sceneNumber: 3,
-        title: "The Team",
-        location: "Small meeting space",
+        title: "The Doubt",
+        location: "Street Outside Daniel's Workplace",
         time: "Evening",
         description:
-          "Daniel, Sarah, Michael and Amara discuss possible solutions.",
-        purpose: "Develop character relationships.",
+          "Michael questions whether Daniel can actually succeed.",
+        purpose: "Introduce external conflict.",
       },
       {
         sceneNumber: 4,
-        title: "The Warning",
-        location: "Quiet outdoor location",
+        title: "The Turning Point",
+        location: "Chief Okoro's Compound",
         time: "Night",
         description:
-          "Chief Okoro gives the group advice before their biggest decision.",
-        purpose: "Create the turning point.",
+          "Chief Okoro gives Daniel advice about courage and action.",
+        purpose: "Create the emotional turning point.",
       },
       {
         sceneNumber: 5,
-        title: "The Decision",
-        location: "The project location",
+        title: "The First Step",
+        location: "Daniel's Workspace",
         time: "Morning",
         description:
-          "The characters act together and take the next major step.",
-        purpose: "Move the story toward resolution.",
+          "Daniel finally starts working on the idea instead of waiting.",
+        purpose: "End with action and hope.",
       },
     ],
+
     shots: [
       {
         shotNumber: 1,
         sceneNumber: 1,
         shotType: "Wide Shot",
-        camera: "Slow cinematic push-in",
         description:
-          "Show Daniel in his workspace before moving closer to him.",
+          "Daniel sits alone in his room staring at a notebook.",
+        camera: "Slow push-in",
+        character: "Daniel",
       },
       {
         shotNumber: 2,
         sceneNumber: 1,
-        shotType: "Medium Shot",
-        camera: "Eye-level",
+        shotType: "Close Up",
         description:
-          "Daniel studies his plan and prepares to act.",
+          "Close-up of Daniel's worried but determined face.",
+        camera: "Static close-up",
+        character: "Daniel",
       },
       {
         shotNumber: 3,
         sceneNumber: 2,
-        shotType: "Tracking Shot",
-        camera: "Smooth forward movement",
+        shotType: "Two Shot",
         description:
-          "Follow Daniel as he faces the first challenge.",
+          "Daniel explains his idea while Sarah listens.",
+        camera: "Medium two-shot",
+        character: "Daniel, Sarah",
       },
       {
         shotNumber: 4,
-        sceneNumber: 3,
-        shotType: "Group Shot",
-        camera: "Slow side movement",
+        sceneNumber: 2,
+        shotType: "Close Up",
         description:
-          "Show the characters discussing the problem together.",
+          "Sarah smiles and encourages Daniel.",
+        camera: "Gentle push-in",
+        character: "Sarah",
       },
       {
         shotNumber: 5,
-        sceneNumber: 4,
-        shotType: "Close-Up",
-        camera: "Slow push-in",
+        sceneNumber: 3,
+        shotType: "Medium Shot",
         description:
-          "Focus on Chief Okoro while he gives his warning.",
+          "Michael confronts Daniel and questions his plan.",
+        camera: "Handheld medium shot",
+        character: "Michael, Daniel",
       },
       {
         shotNumber: 6,
-        sceneNumber: 5,
-        shotType: "Wide Cinematic Shot",
-        camera: "Slow crane movement",
+        sceneNumber: 4,
+        shotType: "Medium Close Up",
         description:
-          "Show the group taking the final step together.",
+          "Chief Okoro calmly gives Daniel advice.",
+        camera: "Slow dolly",
+        character: "Chief Okoro, Daniel",
       },
     ],
+
+    createdAt: new Date().toISOString(),
   };
 
-  return story;
+  return {
+    story,
+    characters,
+  };
 }
 
 /* =========================================================
-   VOICE SLOT ASSIGNMENT
-========================================================= */
+   CHARACTER VOICES
+   ========================================================= */
 
-function assignCharacterVoices(characters, language) {
+function assignCharacterVoices(
+  characters,
+  language
+) {
   const providerVoices =
     CONFIRMED_VOICES[language] || [];
 
-  return characters.map((character, index) => {
-    const providerVoice =
-      providerVoices[index] || null;
+  return safeArray(characters).map(
+    (character, index) => {
+      const providerVoice =
+        providerVoices[index] || null;
 
-    return {
-      ...character,
-      voice: {
-        slot:
-          character.voiceSlot ||
-          `VOICE_${String.fromCharCode(65 + index)}`,
+      return {
+        ...character,
+
         voiceId:
           providerVoice?.id || null,
+
         voiceName:
           providerVoice?.name ||
           `Reserved Voice ${index + 1}`,
-        language,
-        provider: providerVoice
-          ? "9jaLingo"
-          : "pending_provider_voice",
-        status: providerVoice
-          ? "ready"
-          : "reserved",
-      },
-    };
-  });
+
+        voiceGender:
+          providerVoice?.gender ||
+          character.gender ||
+          "Unknown",
+
+        voiceStatus:
+          providerVoice
+            ? "ready"
+            : "reserved",
+      };
+    }
+  );
 }
 
 /* =========================================================
-   BOMBA TEST DIALOGUE ENGINE
-   No OpenAI call.
-
-   This creates structured dialogue from:
-   STORY + CHARACTERS + SCENES.
-
-   Each dialogue line carries:
-   - scene
-   - character
-   - voice assignment
-   - language
-   - estimated duration
-========================================================= */
+   DIALOGUE
+   ========================================================= */
 
 function createTestDialogueFromStory(
   story,
@@ -352,13 +384,13 @@ function createTestDialogueFromStory(
 ) {
   if (!story) {
     throw new Error(
-      "Story is required before building dialogue."
+      "A STORY is required before creating dialogue."
     );
   }
 
-  if (!characters?.length) {
+  if (!safeArray(characters).length) {
     throw new Error(
-      "Characters are required before building dialogue."
+      "CHARACTERS are required before creating dialogue."
     );
   }
 
@@ -369,36 +401,39 @@ function createTestDialogueFromStory(
       character;
   }
 
-  const getCharacter = (name) => {
-    const character =
-      characterMap[name];
+  function getCharacter(name) {
+    return (
+      characterMap[name] || {
+        id: makeId("character"),
+        name,
+        role: "Character",
+        voiceSlot: null,
+        voiceId: null,
+        voiceName: null,
+        voiceStatus: "reserved",
+      }
+    );
+  }
 
-    if (!character) {
-      throw new Error(
-        `Character "${name}" was not found.`
-      );
-    }
-
-    return character;
-  };
-
-  const createLine = (
+  function createLine(
     sceneNumber,
     lineNumber,
     characterName,
     text,
-    emotion = "natural"
-  ) => {
+    emotion
+  ) {
     const character =
       getCharacter(characterName);
 
-    const wordCount =
-      text
+    const words =
+      safeText(text)
         .trim()
         .split(/\s+/)
-        .filter(Boolean).length;
+        .filter(Boolean);
 
-    const durationEstimateSec =
+    const wordCount = words.length;
+
+    const duration =
       Math.max(
         1,
         Number(
@@ -408,212 +443,202 @@ function createTestDialogueFromStory(
 
     return {
       id: `dialogue-${sceneNumber}-${lineNumber}`,
+
       sceneNumber,
-      lineNumber,
-      characterId: character.id,
-      characterName: character.name,
-      role: character.role,
+
+      characterId:
+        character.id,
+
+      characterName:
+        character.name,
+
+      role:
+        character.role,
+
       text,
-      language,
+
       emotion,
+
       voice: {
         slot:
-          character.voice?.slot ||
-          character.voiceSlot ||
-          null,
-        voiceId:
-          character.voice?.voiceId ||
-          null,
-        voiceName:
-          character.voice?.voiceName ||
-          null,
+          character.voiceSlot || null,
+
+        id:
+          character.voiceId || null,
+
+        name:
+          character.voiceName || null,
+
         status:
-          character.voice?.status ||
+          character.voiceStatus ||
           "reserved",
       },
+
       timing: {
-        durationEstimateSec,
+        wordCount,
+        durationSec: duration,
       },
+
       audio: {
         status: "pending",
-        url: null,
-        publicId: null,
+        url: "",
       },
     };
-  };
+  }
 
-  const dialogue = [
+  const lines = [
     createLine(
       1,
       1,
       "Daniel",
       "I don think say this idea fit work, but I no wan give up.",
-      "determined"
+      "Worried"
     ),
+
     createLine(
       1,
       2,
+      "Daniel",
+      "Maybe na me dey think too much.",
+      "Uncertain"
+    ),
+
+    createLine(
+      2,
+      3,
       "Sarah",
       "Then make you start small. You no need everything before you begin.",
-      "encouraging"
+      "Encouraging"
     ),
+
     createLine(
-      1,
-      3,
+      2,
+      4,
       "Daniel",
       "Na true. If I no start now, I fit regret am later.",
-      "hopeful"
+      "Hopeful"
     ),
 
     createLine(
       2,
-      1,
-      "Daniel",
-      "This thing harder pass wetin I expect.",
-      "worried"
-    ),
-    createLine(
-      2,
-      2,
-      "Michael",
-      "I tell you. Big dreams need more than just talking.",
-      "challenging"
-    ),
-    createLine(
-      2,
-      3,
-      "Daniel",
-      "Maybe. But I still believe say we fit make am work.",
-      "determined"
-    ),
-
-    createLine(
-      3,
-      1,
-      "Daniel",
-      "Make we sit down and find another way forward.",
-      "focused"
-    ),
-    createLine(
-      3,
-      2,
+      5,
       "Sarah",
-      "I fit help with the plan. We just need everybody to cooperate.",
-      "supportive"
+      "Exactly. One step fit change everything.",
+      "Confident"
     ),
+
     createLine(
       3,
-      3,
+      6,
       "Michael",
-      "Maybe I too dey look at this thing from only my own side.",
-      "reflective"
+      "You really think say this your idea go work?",
+      "Mocking"
     ),
+
     createLine(
       3,
-      4,
-      "Amara",
-      "Then make we work together. That one fit change everything.",
-      "optimistic"
+      7,
+      "Daniel",
+      "I no know yet, but I go give am my best.",
+      "Determined"
+    ),
+
+    createLine(
+      3,
+      8,
+      "Michael",
+      "Hope say you know wetin you dey enter.",
+      "Doubtful"
+    ),
+
+    createLine(
+      3,
+      9,
+      "Daniel",
+      "I go learn as I dey go.",
+      "Determined"
     ),
 
     createLine(
       4,
-      1,
+      10,
       "Chief Okoro",
-      "Young people, sometimes the biggest problem no be lack of money. Na fear.",
-      "wise"
+      "My son, every big journey start with one small step.",
+      "Wise"
     ),
+
     createLine(
       4,
-      2,
+      11,
       "Daniel",
-      "So you think say we should continue?",
-      "uncertain"
+      "But what if I fail?",
+      "Afraid"
     ),
+
     createLine(
       4,
-      3,
+      12,
       "Chief Okoro",
-      "If the purpose is good, take the next step and learn as you go.",
-      "encouraging"
+      "Failure no be the end. Giving up na the real failure.",
+      "Inspirational"
     ),
 
     createLine(
       5,
-      1,
-      "Daniel",
-      "Okay. This time, we move together.",
-      "confident"
-    ),
-    createLine(
-      5,
-      2,
-      "Sarah",
-      "Yes. No more waiting.",
-      "determined"
-    ),
-    createLine(
-      5,
-      3,
+      13,
       "Amara",
-      "Everybody ready?",
-      "excited"
+      "Daniel, you don finally start!",
+      "Excited"
     ),
+
     createLine(
       5,
-      4,
+      14,
       "Daniel",
-      "Let's do am.",
-      "confident"
+      "Yes. I realize say waiting no go make the dream happen.",
+      "Hopeful"
+    ),
+
+    createLine(
+      5,
+      15,
+      "Amara",
+      "Then keep going. We dey behind you.",
+      "Supportive"
+    ),
+
+    createLine(
+      5,
+      16,
+      "Daniel",
+      "This na just the beginning.",
+      "Determined"
     ),
   ];
 
-  const scenes = story.scenes || [];
+  const sceneMap = {};
 
-  const sceneDialogue = scenes.map(
-    (scene) => {
-      const lines =
-        dialogue.filter(
-          (line) =>
-            Number(line.sceneNumber) ===
-            Number(scene.sceneNumber)
-        );
-
-      const totalDuration =
-        lines.reduce(
-          (total, line) =>
-            total +
-            Number(
-              line.timing
-                ?.durationEstimateSec ||
-                0
-            ),
-          0
-        );
-
-      return {
-        sceneNumber:
-          scene.sceneNumber,
-        title: scene.title,
-        location: scene.location,
-        time: scene.time,
-        lines,
-        estimatedDialogueDurationSec:
-          Number(
-            totalDuration.toFixed(1)
-          ),
-      };
+  for (const line of lines) {
+    if (!sceneMap[line.sceneNumber]) {
+      sceneMap[line.sceneNumber] = [];
     }
-  );
 
-  const totalDuration =
-    dialogue.reduce(
+    sceneMap[line.sceneNumber].push(line);
+  }
+
+  const dialogueScenes = Object.keys(
+    sceneMap
+  ).map((sceneNumber) => ({
+    sceneNumber: Number(sceneNumber),
+    lines: sceneMap[sceneNumber],
+  }));
+
+  const estimatedDurationSec =
+    lines.reduce(
       (total, line) =>
         total +
         Number(
-          line.timing
-            ?.durationEstimateSec ||
-            0
+          line?.timing?.durationSec || 0
         ),
       0
     );
@@ -623,44 +648,50 @@ function createTestDialogueFromStory(
     language,
     storyId: story.id,
     title: story.title,
-    lines: dialogue,
-    scenes: sceneDialogue,
-    totalLines: dialogue.length,
-    estimatedDurationSec:
-      Number(totalDuration.toFixed(1)),
+    lines,
+    scenes: dialogueScenes,
+    totalLines: lines.length,
+    estimatedDurationSec,
     createdAt:
       new Date().toISOString(),
   };
 }
 
+/* =========================================================
+   COMPONENT
+   ========================================================= */
+
 export default function StudioBoard() {
-  const [activeModule, setActiveModule] = useState(null);
+  /* -------------------------------------------------------
+     CORE PRODUCTION
+  ------------------------------------------------------- */
 
-  /* =======================================================
-     BOMBA PRODUCTION BRAIN
-  ======================================================= */
+  const [activeModule, setActiveModule] =
+    useState(null);
 
-  const [production, setProduction] = useState(null);
+  const [production, setProduction] =
+    useState(null);
 
-  /* =======================================================
+  /* -------------------------------------------------------
      IDEA
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [ideaText, setIdeaText] = useState("");
+  const [ideaText, setIdeaText] =
+    useState("");
 
-  const [ideaStatus, setIdeaStatus] = useState(
-    "Describe your movie, video, ad or story idea."
-  );
+  const [ideaStatus, setIdeaStatus] =
+    useState(
+      "Describe your movie, video, ad or story idea."
+    );
 
-  const ideaInitializedRef = useRef(false);
-
-  /* =======================================================
+  /* -------------------------------------------------------
      STORY
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [storyStatus, setStoryStatus] = useState(
-    "Save an IDEA first, then BOMBA can build the STORY."
-  );
+  const [storyStatus, setStoryStatus] =
+    useState(
+      "Save an IDEA first, then BOMBA can build the STORY."
+    );
 
   const [isBuildingStory, setIsBuildingStory] =
     useState(false);
@@ -668,132 +699,195 @@ export default function StudioBoard() {
   const [storyMode, setStoryMode] =
     useState("test");
 
-  /* =======================================================
+  /* -------------------------------------------------------
      CHARACTERS
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [characterStatus, setCharacterStatus] =
-    useState(
-      "Characters will be created from the STORY."
-    );
+  const [
+    characterStatus,
+    setCharacterStatus,
+  ] = useState(
+    "Characters will be created from the STORY."
+  );
 
-  const [characterLanguage, setCharacterLanguage] =
-    useState("pcm");
+  const [
+    characterLanguage,
+    setCharacterLanguage,
+  ] = useState("pcm");
 
-  /* =======================================================
+  /* -------------------------------------------------------
      SCENES
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [sceneStatus, setSceneStatus] = useState(
+  const [
+    sceneStatus,
+    setSceneStatus,
+  ] = useState(
     "Build the STORY first. BOMBA will prepare the scene plan."
   );
 
-  const [selectedSceneNumber, setSelectedSceneNumber] =
-    useState(1);
+  const [
+    selectedSceneNumber,
+    setSelectedSceneNumber,
+  ] = useState(1);
 
-  /* =======================================================
+  /* -------------------------------------------------------
      DIALOGUE
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [dialogueStatus, setDialogueStatus] =
+  const [
+    dialogueStatus,
+    setDialogueStatus,
+  ] = useState(
+    "Build the STORY and CHARACTERS first. BOMBA will prepare the dialogue."
+  );
+
+  const [
+    selectedDialogueScene,
+    setSelectedDialogueScene,
+  ] = useState(1);
+
+  const [
+    isBuildingDialogue,
+    setIsBuildingDialogue,
+  ] = useState(false);
+
+  /* -------------------------------------------------------
+     VIDEO
+  ------------------------------------------------------- */
+
+  const [videoPlan, setVideoPlan] =
+    useState(null);
+
+  const [
+    videoPlanStatus,
+    setVideoPlanStatus,
+  ] = useState("VIDEO PLAN WAITING");
+
+  const [
+    isBuildingVideoPlan,
+    setIsBuildingVideoPlan,
+  ] = useState(false);
+
+  /* -------------------------------------------------------
+     SOUND
+  ------------------------------------------------------- */
+
+  const [soundPrompt, setSoundPrompt] =
     useState(
-      "Build the STORY and CHARACTERS first. BOMBA will prepare the dialogue."
+      "cinematic emotional background music for a realistic movie scene"
     );
 
-  const [selectedDialogueScene, setSelectedDialogueScene] =
-    useState(1);
+  const [soundDuration, setSoundDuration] =
+    useState(5);
 
-  const [isBuildingDialogue, setIsBuildingDialogue] =
-    useState(false);
+  const [
+    generatedAudioUrl,
+    setGeneratedAudioUrl,
+  ] = useState("");
 
-  /* =======================================================
-     SOUND
-  ======================================================= */
+  const [
+    isGeneratingSound,
+    setIsGeneratingSound,
+  ] = useState(false);
 
-const [videoPlan, setVideoPlan] = useState(null);
-const [videoPlanStatus, setVideoPlanStatus] = useState(
-  "VIDEO PLAN WAITING"
-);
-const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
-  useState(false);
-  const [soundPrompt, setSoundPrompt] = useState(
-    "cinematic emotional background music for a realistic movie scene"
+  const [
+    generatedSoundStatus,
+    setGeneratedSoundStatus,
+  ] = useState(
+    "Ready to create AI sound."
   );
 
-  const [soundDuration, setSoundDuration] = useState(5);
-  const [generatedAudioUrl, setGeneratedAudioUrl] =
-    useState("");
-  const [isGeneratingSound, setIsGeneratingSound] =
-    useState(false);
+  const [
+    generatedSoundError,
+    setGeneratedSoundError,
+  ] = useState("");
 
-  const [generatedSoundStatus, setGeneratedSoundStatus] =
-    useState("Ready to create AI sound.");
+  const generatedAudioRef =
+    useRef(null);
 
-  const [generatedSoundError, setGeneratedSoundError] =
-    useState("");
-
-  const generatedAudioRef = useRef(null);
-
-  /* =======================================================
+  /* -------------------------------------------------------
      VOICE
-  ======================================================= */
+  ------------------------------------------------------- */
 
-  const [voiceText, setVoiceText] = useState(
-    "Welcome to BOMBA AI. No stress, we go help you create your video. Just describe wetin you want, and BOMBA AI go build am."
+  const [voiceText, setVoiceText] =
+    useState(
+      "Welcome to BOMBA AI. No stress, we go help you create your video. Just describe wetin you want, and BOMBA AI go build am."
+    );
+
+  const [voiceLanguage, setVoiceLanguage] =
+    useState("pcm");
+
+  const [voiceId, setVoiceId] =
+    useState("ada_pcm");
+
+  const [
+    availableVoices,
+    setAvailableVoices,
+  ] = useState(CONFIRMED_VOICES.pcm);
+
+  const [
+    generatedVoiceUrl,
+    setGeneratedVoiceUrl,
+  ] = useState("");
+
+  const [
+    isGeneratingVoice,
+    setIsGeneratingVoice,
+  ] = useState(false);
+
+  const [
+    generatedVoiceStatus,
+    setGeneratedVoiceStatus,
+  ] = useState(
+    "Ready to create AI voice."
   );
 
-  const [voiceLanguage, setVoiceLanguage] = useState("pcm");
+  const [
+    generatedVoiceError,
+    setGeneratedVoiceError,
+  ] = useState("");
 
-  const [voiceId, setVoiceId] = useState("ada_pcm");
-
-  const [availableVoices, setAvailableVoices] =
-    useState(CONFIRMED_VOICES.pcm);
-
-  const [generatedVoiceUrl, setGeneratedVoiceUrl] =
-    useState("");
-
-  const [isGeneratingVoice, setIsGeneratingVoice] =
-    useState(false);
-
-  const [generatedVoiceStatus, setGeneratedVoiceStatus] =
-    useState("Ready to create AI voice.");
-
-  const [generatedVoiceError, setGeneratedVoiceError] =
-    useState("");
-
-  const generatedVoiceRef = useRef(null);
+  const generatedVoiceRef =
+    useRef(null);
 
   /* =======================================================
      INITIALIZE PRODUCTION
   ======================================================= */
 
   useEffect(() => {
-    let currentProduction = getProduction();
+    let currentProduction =
+      getProduction();
 
     if (!currentProduction) {
-      currentProduction = initializeProduction("");
+      currentProduction =
+        initializeProduction("");
     }
 
-    setProduction(currentProduction);
-
-    if (!ideaInitializedRef.current) {
-      const savedIdea =
-        currentProduction?.idea?.data?.prompt || "";
-
-      if (savedIdea) {
-        setIdeaText(savedIdea);
-      }
-
-      ideaInitializedRef.current = true;
-    }
-
-    const unsubscribe = subscribeToProduction(
-      (nextProduction) => {
-        setProduction(nextProduction);
-      }
+    setProduction(
+      currentProduction
     );
 
-    return unsubscribe;
+    const savedIdea =
+      currentProduction?.idea?.data
+        ?.prompt || "";
+
+    if (savedIdea) {
+      setIdeaText(savedIdea);
+    }
+
+    const unsubscribe =
+      subscribeToProduction(
+        (nextProduction) => {
+          setProduction(
+            nextProduction
+          );
+        }
+      );
+
+    return () => {
+      unsubscribe?.();
+    };
   }, []);
 
   /* =======================================================
@@ -801,148 +895,140 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
   ======================================================= */
 
   function saveIdeaToProduction() {
-    const cleanIdea = ideaText.trim();
+    const cleanIdea =
+      ideaText.trim();
 
     if (!cleanIdea) {
       setIdeaStatus(
-        "⚠️ Enter your video idea first."
+        "Please describe your idea first."
       );
-
       return;
     }
 
     try {
-      const nextProduction = changeStage(
-        "idea",
-        {
-          prompt: cleanIdea,
-        }
+      const nextProduction =
+        changeStage(
+          "idea",
+          {
+            prompt: cleanIdea,
+          }
+        );
+
+      setProduction(
+        nextProduction
       );
 
-      setProduction(nextProduction);
-
       setIdeaStatus(
-        "✅ IDEA SAVED TO BOMBA. STORY is now the next production stage."
+        "IDEA saved successfully. BOMBA is ready for the STORY."
+      );
+
+      setStoryStatus(
+        "IDEA saved. Build the STORY next."
       );
     } catch (error) {
       console.error(
-        "BOMBA IDEA SAVE ERROR:",
+        "BOMBA IDEA error:",
         error
       );
 
       setIdeaStatus(
-        `❌ ${
-          error?.message ||
-          "Unable to save your idea."
-        }`
+        error?.message ||
+          "Unable to save IDEA."
       );
     }
   }
 
   /* =======================================================
-     BUILD STORY — TEST MODE
+     BUILD STORY
   ======================================================= */
 
   function buildTestStory() {
-    const idea =
+    const savedIdea =
       production?.idea?.data?.prompt ||
       ideaText.trim();
 
-    if (!idea) {
+    if (!savedIdea) {
       setStoryStatus(
-        "⚠️ Save your IDEA before building the STORY."
+        "Save an IDEA before building the STORY."
       );
-
+      setActiveModule("IDEA");
       return;
     }
 
     setIsBuildingStory(true);
     setStoryStatus(
-      "🧠 BOMBA is building the STORY in Test Mode..."
+      "BOMBA is building the test STORY..."
     );
 
     try {
-      const story =
-        createTestStoryFromIdea(idea);
+      const result =
+        createTestStoryFromIdea(
+          savedIdea
+        );
 
-      changeStage(
-        "story",
-        {
-          mode: "test",
-          plan: story,
-        }
-      );
+      const story =
+        result.story;
 
       const characters =
         assignCharacterVoices(
-          story.characters,
+          result.characters,
           characterLanguage
         );
 
-      const productionWithCharacters =
+      let nextProduction =
+        changeStage(
+          "story",
+          {
+            mode: storyMode,
+            plan: story,
+          }
+        );
+
+      /*
+       * IMPORTANT:
+       * The Production Brain automatically invalidates
+       * dependent stages when STORY changes.
+       */
+
+      nextProduction =
         changeStage(
           "characters",
           {
-            mode: "test",
+            mode: storyMode,
+            language:
+              characterLanguage,
             characters,
-            voiceAssignments:
-              characters.map(
-                (character) => ({
-                  characterId:
-                    character.id,
-                  characterName:
-                    character.name,
-                  voice:
-                    character.voice,
-                })
-              ),
           }
         );
 
       setProduction(
-        productionWithCharacters
+        nextProduction
       );
 
-      setStoryMode("test");
-
-      const reservedCount =
-        characters.filter(
-          (character) =>
-            character.voice?.status ===
-            "reserved"
-        ).length;
-
       setStoryStatus(
-        reservedCount > 0
-          ? `✅ TEST STORY CREATED. ${characters.length} characters created. ${reservedCount} voice slots are reserved for additional provider voices.`
-          : `✅ TEST STORY CREATED. ${characters.length} characters and voice assignments are ready.`
+        "STORY built successfully."
       );
 
       setCharacterStatus(
-        `✅ ${characters.length} characters created from the STORY.`
+        `${characters.length} characters prepared successfully.`
       );
 
       setSceneStatus(
-        `🟡 SCENE PLAN READY. ${story.scenes?.length || 0} scenes and ${story.shots?.length || 0} shots are available from the STORY.`
+        "Build DIALOGUE next, then BOMBA can prepare SCENES."
       );
 
       setDialogueStatus(
-        "💬 STORY and CHARACTERS are ready. Dialogue can now be built."
+        "STORY and CHARACTERS are ready. Build DIALOGUE next."
       );
-
-      setSelectedSceneNumber(1);
-      setSelectedDialogueScene(1);
     } catch (error) {
       console.error(
-        "BOMBA TEST STORY ERROR:",
+        "BOMBA STORY error:",
         error
       );
 
       setStoryStatus(
-        `❌ ${
-          error?.message ||
-          "Unable to build the test story."
-        }`
+        error?.message ||
+          "Unable to build STORY."
       );
     } finally {
       setIsBuildingStory(false);
@@ -950,7 +1036,7 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
   }
 
   /* =======================================================
-     BUILD DIALOGUE — TEST MODE
+     BUILD DIALOGUE
   ======================================================= */
 
   function buildTestDialogue() {
@@ -959,28 +1045,33 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
       null;
 
     const currentCharacters =
-      production?.characters?.data
-        ?.characters || [];
+      safeArray(
+        production?.characters?.data
+          ?.characters
+      );
 
     if (!currentStory) {
       setDialogueStatus(
-        "⚠️ Build the STORY before creating dialogue."
+        "Build the STORY first."
       );
-
+      setActiveModule("PLAN");
       return;
     }
 
     if (!currentCharacters.length) {
       setDialogueStatus(
-        "⚠️ Build the CHARACTERS before creating dialogue."
+        "Build CHARACTERS first."
       );
-
+      setActiveModule(
+        "CHARACTERS"
+      );
       return;
     }
 
     setIsBuildingDialogue(true);
+
     setDialogueStatus(
-      "🧠 BOMBA is building structured dialogue from the STORY, CHARACTERS and SCENES..."
+      "BOMBA is building the dialogue..."
     );
 
     try {
@@ -1001,12 +1092,6 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
             plan: dialogue,
             lines:
               dialogue.lines,
-            scenes:
-              dialogue.scenes,
-            totalLines:
-              dialogue.totalLines,
-            estimatedDurationSec:
-              dialogue.estimatedDurationSec,
           }
         );
 
@@ -1015,21 +1100,21 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
       );
 
       setDialogueStatus(
-        `✅ DIALOGUE READY. ${dialogue.totalLines} dialogue lines created across ${dialogue.scenes.length} scenes.`
+        `${dialogue.totalLines} dialogue lines created successfully.`
       );
 
-      setSelectedDialogueScene(1);
+      setSceneStatus(
+        "Dialogue is ready. BOMBA can now prepare SCENES."
+      );
     } catch (error) {
       console.error(
-        "BOMBA TEST DIALOGUE ERROR:",
+        "BOMBA DIALOGUE error:",
         error
       );
 
       setDialogueStatus(
-        `❌ ${
-          error?.message ||
-          "Unable to build the test dialogue."
-        }`
+        error?.message ||
+          "Unable to build dialogue."
       );
     } finally {
       setIsBuildingDialogue(false);
@@ -1037,7 +1122,345 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
   }
 
   /* =======================================================
-     SOUND GENERATION
+     BUILD SCENES
+  ======================================================= */
+
+  function buildScenes() {
+    const currentStory =
+      production?.story?.data?.plan ||
+      null;
+
+    if (!currentStory) {
+      setSceneStatus(
+        "Build the STORY first."
+      );
+      return;
+    }
+
+    const currentScenes =
+      safeArray(
+        currentStory.scenes
+      );
+
+    if (!currentScenes.length) {
+      setSceneStatus(
+        "The STORY does not contain any scenes."
+      );
+      return;
+    }
+
+    try {
+      const nextProduction =
+        changeStage(
+          "scenes",
+          {
+            mode:
+              currentStory.mode ||
+              "test",
+
+            storyId:
+              currentStory.id,
+
+            scenes:
+              currentScenes,
+
+            totalScenes:
+              currentScenes.length,
+
+            createdAt:
+              new Date().toISOString(),
+          }
+        );
+
+      setProduction(
+        nextProduction
+      );
+
+      setSelectedSceneNumber(
+        currentScenes[0]
+          ?.sceneNumber || 1
+      );
+
+      setSceneStatus(
+        `${currentScenes.length} scenes prepared successfully.`
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA SCENES error:",
+        error
+      );
+
+      setSceneStatus(
+        error?.message ||
+          "Unable to prepare scenes."
+      );
+    }
+  }
+
+  /* =======================================================
+     BUILD SHOTS
+  ======================================================= */
+
+  function buildShots() {
+    const currentStory =
+      production?.story?.data?.plan ||
+      null;
+
+    if (!currentStory) {
+      setSceneStatus(
+        "Build the STORY first."
+      );
+      return;
+    }
+
+    const currentShots =
+      safeArray(
+        currentStory.shots
+      );
+
+    if (!currentShots.length) {
+      setSceneStatus(
+        "The STORY does not contain any shots."
+      );
+      return;
+    }
+
+    try {
+      const nextProduction =
+        changeStage(
+          "shots",
+          {
+            mode:
+              currentStory.mode ||
+              "test",
+
+            storyId:
+              currentStory.id,
+
+            shots:
+              currentShots,
+
+            totalShots:
+              currentShots.length,
+
+            createdAt:
+              new Date().toISOString(),
+          }
+        );
+
+      setProduction(
+        nextProduction
+      );
+
+      setSceneStatus(
+        `${currentShots.length} shots prepared successfully.`
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA SHOTS error:",
+        error
+      );
+
+      setSceneStatus(
+        error?.message ||
+          "Unable to prepare shots."
+      );
+    }
+  }
+
+  /* =======================================================
+     BUILD VIDEO PLAN
+  ======================================================= */
+
+  function buildVideoPlan() {
+    const currentStory =
+      production?.story?.data?.plan ||
+      null;
+
+    const currentCharacters =
+      safeArray(
+        production?.characters?.data
+          ?.characters
+      );
+
+    const currentScenes =
+      safeArray(
+        production?.scenes?.data
+          ?.scenes
+      );
+
+    const currentShots =
+      safeArray(
+        production?.shots?.data
+          ?.shots
+      );
+
+    const dialogueLines =
+      safeArray(
+        production?.dialogue?.data
+          ?.lines
+      );
+
+    if (!currentStory) {
+      setVideoPlanStatus(
+        "Build STORY first."
+      );
+      return;
+    }
+
+    if (!currentScenes.length) {
+      setVideoPlanStatus(
+        "Prepare SCENES before building VIDEO."
+      );
+      return;
+    }
+
+    if (!currentShots.length) {
+      setVideoPlanStatus(
+        "Prepare SHOTS before building VIDEO."
+      );
+      return;
+    }
+
+    setIsBuildingVideoPlan(true);
+
+    setVideoPlanStatus(
+      "BOMBA is building the VIDEO plan..."
+    );
+
+    try {
+      const videoScenes =
+        currentScenes.map(
+          (scene) => {
+            const sceneShots =
+              currentShots.filter(
+                (shot) =>
+                  Number(
+                    shot.sceneNumber
+                  ) ===
+                  Number(
+                    scene.sceneNumber
+                  )
+              );
+
+            return {
+              sceneNumber:
+                scene.sceneNumber,
+
+              title:
+                scene.title ||
+                `Scene ${scene.sceneNumber}`,
+
+              location:
+                scene.location || "",
+
+              time:
+                scene.time || "",
+
+              shots:
+                sceneShots.map(
+                  (shot) => {
+                    const relatedDialogue =
+                      dialogueLines.find(
+                        (line) =>
+                          Number(
+                            line.sceneNumber
+                          ) ===
+                            Number(
+                              shot.sceneNumber
+                            ) &&
+                          safeText(
+                            line.characterName
+                          )
+                        );
+
+                    return {
+                      ...shot,
+
+                      dialogue:
+                        relatedDialogue
+                          ?.text || "",
+
+                      character:
+                        shot.character ||
+                        relatedDialogue
+                          ?.characterName ||
+                        "",
+                    };
+                  }
+                ),
+            };
+          }
+        );
+
+      const nextVideoPlan = {
+        mode:
+          currentStory.mode ||
+          "test",
+
+        storyId:
+          currentStory.id,
+
+        title:
+          currentStory.title,
+
+        totalScenes:
+          currentScenes.length,
+
+        totalShots:
+          currentShots.length,
+
+        voiceConnected:
+          Boolean(
+            production?.voices?.data
+          ),
+
+        soundConnected:
+          Boolean(
+            production?.sound?.data
+          ),
+
+        scenes:
+          videoScenes,
+
+        createdAt:
+          new Date().toISOString(),
+      };
+
+      const nextProduction =
+        changeStage(
+          "video",
+          nextVideoPlan
+        );
+
+      setProduction(
+        nextProduction
+      );
+
+      setVideoPlan(
+        nextVideoPlan
+      );
+
+      setVideoPlanStatus(
+        "VIDEO PLAN ready."
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA VIDEO error:",
+        error
+      );
+
+      setVideoPlanStatus(
+        error?.message ||
+          "Unable to build VIDEO plan."
+      );
+    } finally {
+      setIsBuildingVideoPlan(false);
+    }
+  }
+
+  /* =======================================================
+     SOUND
   ======================================================= */
 
   async function generateAISound() {
@@ -1046,24 +1469,16 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
 
     if (!cleanPrompt) {
       setGeneratedSoundError(
-        "Enter a sound description first."
+        "Please enter a sound prompt."
       );
-
-      setGeneratedSoundStatus(
-        "⚠️ Sound description is required."
-      );
-
       return;
     }
 
-    stopGeneratedSound();
-
     setIsGeneratingSound(true);
-    setGeneratedAudioUrl("");
     setGeneratedSoundError("");
 
     setGeneratedSoundStatus(
-      "⏳ BOMBA AI is connecting to the sound engine..."
+      "Generating AI sound..."
     );
 
     try {
@@ -1072,13 +1487,19 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
           "/api/sound/generate",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
-              type: "Background Music",
-              prompt: cleanPrompt,
+              type:
+                "Background Music",
+
+              prompt:
+                cleanPrompt,
+
               duration:
                 Number(soundDuration),
             }),
@@ -1095,9 +1516,7 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
           ? JSON.parse(text)
           : {};
       } catch {
-        throw new Error(
-          "Sound server returned an invalid response."
-        );
+        data = {};
       }
 
       if (!response.ok) {
@@ -1109,115 +1528,123 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
       }
 
       if (
-        data?.status ===
-          "completed" &&
-        data?.audioUrl
+        data?.audioUrl &&
+        typeof data.audioUrl ===
+          "string"
       ) {
         setGeneratedAudioUrl(
           data.audioUrl
         );
 
         setGeneratedSoundStatus(
-          "✅ AI sound created successfully. Press PLAY AI SOUND."
+          "AI sound is ready."
         );
+
+        try {
+          const nextProduction =
+            changeStage(
+              "sound",
+              {
+                type:
+                  "Background Music",
+
+                prompt:
+                  cleanPrompt,
+
+                duration:
+                  Number(soundDuration),
+
+                audioUrl:
+                  data.audioUrl,
+
+                status:
+                  "completed",
+
+                createdAt:
+                  new Date().toISOString(),
+              }
+            );
+
+          setProduction(
+            nextProduction
+          );
+        } catch (storeError) {
+          console.error(
+            "BOMBA sound store error:",
+            storeError
+          );
+        }
 
         return;
       }
 
       if (
         data?.status ===
-        "processing"
+          "processing"
       ) {
         setGeneratedSoundStatus(
-          "⏳ Sound is still processing. Generate again shortly."
+          "Sound generation is processing. Please try again shortly."
         );
-
         return;
       }
 
       throw new Error(
         data?.error ||
-          "The sound engine did not return an audio file."
+          "The sound API did not return an audio URL."
       );
     } catch (error) {
       console.error(
-        "BOMBA AI SOUND GENERATION ERROR:",
+        "BOMBA SOUND error:",
         error
       );
 
-      const message =
-        error?.message ||
-        "Unable to generate AI sound.";
-
       setGeneratedSoundError(
-        message
+        error?.message ||
+          "Unable to generate sound."
       );
 
       setGeneratedSoundStatus(
-        `❌ ${message}`
+        "Sound generation failed."
       );
     } finally {
-      setIsGeneratingSound(
-        false
-      );
+      setIsGeneratingSound(false);
+    }
+  }
+
+  function stopGeneratedSound() {
+    if (generatedAudioRef.current) {
+      generatedAudioRef.current.pause();
+
+      try {
+        generatedAudioRef.current.currentTime = 0;
+      } catch {}
+
+      generatedAudioRef.current =
+        null;
     }
   }
 
   function playGeneratedSound() {
     if (!generatedAudioUrl) {
-      setGeneratedSoundStatus(
-        "⚠️ Generate a sound first."
-      );
-
       return;
     }
 
     stopGeneratedSound();
 
-    try {
-      const audio =
-        new Audio(
-          generatedAudioUrl
-        );
-
-      audio.preload = "auto";
-
-      generatedAudioRef.current =
-        audio;
-
-      audio.onended = () => {
-        setGeneratedSoundStatus(
-          "🎵 AI sound finished. Ready again."
-        );
-      };
-
-      audio.onerror = () => {
-        setGeneratedSoundStatus(
-          "❌ Generated audio could not be played."
-        );
-      };
-
-      const promise =
-        audio.play();
-
-      if (promise) {
-        promise
-          .then(() => {
-            setGeneratedSoundStatus(
-              "▶️ AI sound is playing."
-            );
-          })
-          .catch(() => {
-            setGeneratedSoundStatus(
-              "❌ Browser blocked the generated audio."
-            );
-          });
-      }
-    } catch {
-      setGeneratedSoundStatus(
-        "❌ Unable to play generated audio."
+    const audio =
+      new Audio(
+        generatedAudioUrl
       );
-    }
+
+    generatedAudioRef.current =
+      audio;
+
+    audio.play().catch((error) => {
+      console.error(
+        "BOMBA sound playback error:",
+        error
+      );
+    });
   }
 
   /* =======================================================
@@ -1225,7 +1652,9 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
   ======================================================= */
 
   useEffect(() => {
-    if (activeModule !== "VOICE") return;
+    if (activeModule !== "VOICE") {
+      return;
+    }
 
     const voices =
       CONFIRMED_VOICES[
@@ -1241,14 +1670,12 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
         const exists =
           voices.some(
             (voice) =>
-              voice.id ===
-              current
+              voice.id === current
           );
 
         return exists
           ? current
-          : voices[0]?.id ||
-              "";
+          : voices[0]?.id || "";
       }
     );
   }, [
@@ -1257,87 +1684,32 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
   ]);
 
   /* =======================================================
-     CLEANUP
-  ======================================================= */
-
-  useEffect(() => {
-    return () => {
-      stopGeneratedSound();
-      stopGeneratedVoice();
-    };
-  }, []);
-
-  function stopGeneratedSound() {
-    if (
-      generatedAudioRef.current
-    ) {
-      try {
-        generatedAudioRef.current.pause();
-        generatedAudioRef.current.currentTime = 0;
-      } catch {}
-
-      generatedAudioRef.current =
-        null;
-    }
-  }
-
-  function stopGeneratedVoice() {
-    if (
-      generatedVoiceRef.current
-    ) {
-      try {
-        generatedVoiceRef.current.pause();
-        generatedVoiceRef.current.currentTime = 0;
-      } catch {}
-
-      generatedVoiceRef.current =
-        null;
-    }
-  }
-
-  /* =======================================================
-     9JALINGO VOICE GENERATION
+     VOICE GENERATION
   ======================================================= */
 
   async function generateAIVoice() {
     const cleanText =
       voiceText.trim();
 
-    const cleanVoiceId =
-      voiceId.trim();
-
     if (!cleanText) {
       setGeneratedVoiceError(
-        "Enter the dialogue you want the AI voice to speak."
+        "Please enter text for the voice."
       );
-
-      setGeneratedVoiceStatus(
-        "⚠️ Voice text is required."
-      );
-
       return;
     }
 
-    if (!cleanVoiceId) {
+    if (!voiceId) {
       setGeneratedVoiceError(
-        "Choose a 9jaLingo voice first."
+        "Please select a voice."
       );
-
-      setGeneratedVoiceStatus(
-        "⚠️ 9jaLingo voice is required."
-      );
-
       return;
     }
 
-    stopGeneratedVoice();
-
-    setGeneratedVoiceUrl("");
-    setGeneratedVoiceError("");
     setIsGeneratingVoice(true);
+    setGeneratedVoiceError("");
 
     setGeneratedVoiceStatus(
-      "⏳ BOMBA AI is sending your dialogue to 9jaLingo..."
+      "Generating AI voice..."
     );
 
     try {
@@ -1346,14 +1718,18 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
           "/api/voice/generate",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
-              text: cleanText,
-              voiceId:
-                cleanVoiceId,
+              text:
+                cleanText,
+
+              voiceId,
+
               language:
                 voiceLanguage,
             }),
@@ -1379,7 +1755,7 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
 
         throw new Error(
           errorData?.error ||
-            errorText ||
+            errorData?.message ||
             `Voice generation failed with HTTP ${response.status}.`
         );
       }
@@ -1387,11 +1763,9 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
       const audioBuffer =
         await response.arrayBuffer();
 
-      if (
-        !audioBuffer.byteLength
-      ) {
+      if (!audioBuffer.byteLength) {
         throw new Error(
-          "9jaLingo returned an empty audio file."
+          "The voice API returned an empty audio response."
         );
       }
 
@@ -1403,1214 +1777,762 @@ const [isBuildingVideoPlan, setIsBuildingVideoPlan] =
           }
         );
 
-      const audioUrl =
+      const localUrl =
         URL.createObjectURL(
           audioBlob
         );
 
       setGeneratedVoiceUrl(
-        audioUrl
+        localUrl
       );
 
       setGeneratedVoiceStatus(
-        "☁️ Uploading your voice automatically..."
+        "Voice generated. Uploading to Cloudinary..."
       );
 
-      const cloudinaryResult =
-        await uploadVoiceToCloudinary(
-          audioBlob
+      try {
+        const cloudinary =
+          await uploadVoiceToCloudinary(
+            audioBlob
+          );
+
+        const currentDialogueLines =
+          safeArray(
+            production?.dialogue
+              ?.data?.lines
+          );
+
+        const matchedLine =
+          currentDialogueLines.find(
+            (line) =>
+              safeText(
+                line.text
+              ).trim() ===
+                cleanText &&
+              line?.voice?.id ===
+                voiceId
+          );
+
+        const existingVoiceLines =
+          safeArray(
+            production?.voices
+              ?.data?.lines
+          );
+
+        const generatedVoiceLine =
+          {
+            id:
+              matchedLine?.id ||
+              makeId("voice"),
+
+            dialogueId:
+              matchedLine?.id ||
+              null,
+
+            text:
+              cleanText,
+
+            language:
+              voiceLanguage,
+
+            voiceId,
+
+            voiceName:
+              availableVoices.find(
+                (voice) =>
+                  voice.id ===
+                  voiceId
+              )?.name ||
+              voiceId,
+
+            audioUrl:
+              cloudinary?.secure_url ||
+              cloudinary?.url ||
+              "",
+
+            cloudinaryPublicId:
+              cloudinary?.public_id ||
+              "",
+
+            resourceType:
+              cloudinary?.resource_type ||
+              "video",
+
+            status:
+              "completed",
+
+            createdAt:
+              new Date().toISOString(),
+          };
+
+        const filteredLines =
+          existingVoiceLines.filter(
+            (line) =>
+              line?.id !==
+              generatedVoiceLine.id
+          );
+
+        const nextProduction =
+          changeStage(
+            "voices",
+            {
+              mode: "test",
+
+              language:
+                voiceLanguage,
+
+              lines: [
+                ...filteredLines,
+                generatedVoiceLine,
+              ],
+
+              latest:
+                generatedVoiceLine,
+
+              createdAt:
+                new Date().toISOString(),
+            }
+          );
+
+        setProduction(
+          nextProduction
         );
 
-      const voicePublicId =
-  cloudinaryResult.public_id;
+        if (
+          typeof window !==
+          "undefined"
+        ) {
+          window.localStorage.setItem(
+            "bomba_voice_public_id",
+            cloudinary.public_id
+          );
 
-// ===== BOMBA PRODUCTION BRAIN: SAVE VOICE =====
+          window.localStorage.setItem(
+            "bomba_voice_cloudinary_resource_type",
+            cloudinary.resource_type ||
+              "video"
+          );
 
-try {
-  const currentDialogueLines =
-    production?.dialogue?.data?.lines || [];
+          window.localStorage.setItem(
+            "bomba_voice_language",
+            voiceLanguage
+          );
 
-  const matchingLine =
-    currentDialogueLines.find(
-      (line) =>
-        line.text?.trim() === cleanText &&
-        line.voice?.voiceId === cleanVoiceId
-    );
+          window.localStorage.setItem(
+            "bomba_voice_text",
+            cleanText
+          );
 
-  if (matchingLine) {
-    const existingVoiceLines =
-      production?.voices?.data?.lines || [];
+          window.localStorage.setItem(
+            "bomba_voice_id",
+            voiceId
+          );
+        }
 
-    const generatedVoiceLine = {
-      dialogueId: matchingLine.id,
-      sceneNumber:
-        matchingLine.sceneNumber,
-      lineNumber:
-        matchingLine.lineNumber,
-      characterId:
-        matchingLine.characterId,
-      characterName:
-        matchingLine.characterName,
-      text: matchingLine.text,
-      language:
-        matchingLine.language || voiceLanguage,
+        setGeneratedVoiceStatus(
+          "Voice is ready and saved to BOMBA."
+        );
+      } catch (cloudinaryError) {
+        console.error(
+          "Cloudinary voice upload/store error:",
+          cloudinaryError
+        );
 
-      voice: {
-        ...matchingLine.voice,
-        voiceId: cleanVoiceId,
-        status: "ready",
-      },
+        setGeneratedVoiceStatus(
+          "Voice generated locally, but Cloudinary upload failed."
+        );
 
-      audio: {
-        status: "ready",
-        url:
-          cloudinaryResult.secure_url ||
-          audioUrl,
-        publicId: voicePublicId,
-        resourceType: "video",
-        durationSec:
-          matchingLine.timing
-            ?.durationEstimateSec || null,
-      },
-
-      timing:
-        matchingLine.timing || {},
-    };
-
-    const nextVoiceLines = [
-      ...existingVoiceLines.filter(
-        (line) =>
-          line.dialogueId !==
-          matchingLine.id
-      ),
-      generatedVoiceLine,
-    ];
-
-    const nextVoiceData = {
-      mode: "test",
-      language: voiceLanguage,
-      lines: nextVoiceLines,
-      totalLines:
-        currentDialogueLines.length,
-      generatedLines:
-        nextVoiceLines.length,
-      completedAt:
-        new Date().toISOString(),
-    };
-
-    const nextProduction =
-      changeStage(
-        "voices",
-        nextVoiceData
-      );
-
-    setProduction(
-      nextProduction
-    );
-
-    console.log(
-      "BOMBA PRODUCTION BRAIN VOICE SAVED:",
-      generatedVoiceLine
-    );
-  }
-} catch (productionError) {
-  console.error(
-    "BOMBA PRODUCTION BRAIN VOICE SAVE ERROR:",
-    productionError
-  );
-}
-
-// ===== EXISTING LOCAL STORAGE =====
-
-localStorage.setItem(
-        "bomba_voice_public_id",
-        voicePublicId
-      );
-
-      localStorage.setItem(
-        "bomba_voice_cloudinary_resource_type",
-        "video"
-      );
-
-      localStorage.setItem(
-        "bomba_voice_language",
-        voiceLanguage
-      );
-
-      localStorage.setItem(
-        "bomba_voice_text",
-        cleanText
-      );
-
-      localStorage.setItem(
-        "bomba_voice_id",
-        cleanVoiceId
-      );
-
-      setGeneratedVoiceStatus(
-        `✅ ${cleanVoiceId} voice ready. Your next video will automatically include this voice.`
-      );
+        setGeneratedVoiceError(
+          cloudinaryError?.message ||
+            "Cloudinary upload failed."
+        );
+      }
     } catch (error) {
       console.error(
-        "BOMBA 9JALINGO VOICE GENERATION ERROR:",
+        "BOMBA VOICE error:",
         error
       );
 
-      const message =
-        error?.message ||
-        "Unable to generate AI voice.";
-
       setGeneratedVoiceError(
-        message
+        error?.message ||
+          "Unable to generate AI voice."
       );
 
       setGeneratedVoiceStatus(
-        `❌ ${message}`
+        "Voice generation failed."
       );
     } finally {
-      setIsGeneratingVoice(
-        false
-      );
+      setIsGeneratingVoice(false);
+    }
+  }
+
+  function stopGeneratedVoice() {
+    if (generatedVoiceRef.current) {
+      generatedVoiceRef.current.pause();
+
+      try {
+        generatedVoiceRef.current.currentTime = 0;
+      } catch {}
+
+      generatedVoiceRef.current =
+        null;
     }
   }
 
   function playGeneratedVoice() {
     if (!generatedVoiceUrl) {
-      setGeneratedVoiceStatus(
-        "⚠️ Generate a voice first."
-      );
-
       return;
     }
 
     stopGeneratedVoice();
 
-    try {
-      const audio =
-        new Audio(
-          generatedVoiceUrl
-        );
-
-      audio.preload = "auto";
-
-      generatedVoiceRef.current =
-        audio;
-
-      audio.onended = () => {
-        setGeneratedVoiceStatus(
-          "🎙️ AI voice finished. Ready again."
-        );
-      };
-
-      audio.onerror = () => {
-        setGeneratedVoiceStatus(
-          "❌ Generated voice could not be played."
-        );
-      };
-
-      const promise =
-        audio.play();
-
-      if (promise) {
-        promise
-          .then(() => {
-            setGeneratedVoiceStatus(
-              "▶️ AI voice is playing."
-            );
-          })
-          .catch(() => {
-            setGeneratedVoiceStatus(
-              "❌ Browser blocked the generated voice."
-            );
-          });
-      }
-    } catch {
-      setGeneratedVoiceStatus(
-        "❌ Unable to play generated voice."
+    const audio =
+      new Audio(
+        generatedVoiceUrl
       );
-    }
+
+    generatedVoiceRef.current =
+      audio;
+
+    audio.play().catch((error) => {
+      console.error(
+        "BOMBA voice playback error:",
+        error
+      );
+    });
   }
+
+  /* =======================================================
+     CLEANUP
+  ======================================================= */
+
+  useEffect(() => {
+    return () => {
+      stopGeneratedSound();
+      stopGeneratedVoice();
+    };
+  }, []);
+
+  /* =======================================================
+     DERIVED PRODUCTION DATA
+  ======================================================= */
 
   const story =
     production?.story?.data?.plan ||
     null;
 
   const characters =
-    production?.characters?.data
-      ?.characters || [];
+    safeArray(
+      production?.characters?.data
+        ?.characters
+    );
 
   const scenes =
-    story?.scenes || [];
+    safeArray(
+      production?.story?.data?.plan
+        ?.scenes
+    );
 
   const shots =
-    story?.shots || [];
+    safeArray(
+      production?.story?.data?.plan
+        ?.shots
+    );
 
   const dialoguePlan =
-    production?.dialogue?.data?.plan ||
-    null;
+    production?.dialogue?.data
+      ?.plan || null;
 
   const dialogueScenes =
-    dialoguePlan?.scenes || [];
+    safeArray(
+      dialoguePlan?.scenes
+    );
 
   const selectedScene =
     scenes.find(
       (scene) =>
-        Number(scene.sceneNumber) ===
-        Number(selectedSceneNumber)
-    ) || scenes[0] || null;
+        Number(
+          scene?.sceneNumber
+        ) ===
+        Number(
+          selectedSceneNumber
+        )
+    ) ||
+    scenes[0] ||
+    null;
 
   const selectedSceneShots =
-    selectedScene
-      ? shots.filter(
-          (shot) =>
-            Number(shot.sceneNumber) ===
-            Number(
-              selectedScene.sceneNumber
-            )
+    shots.filter(
+      (shot) =>
+        Number(
+          shot?.sceneNumber
+        ) ===
+        Number(
+          selectedScene
+            ?.sceneNumber
         )
-      : [];
+    );
 
   const selectedDialogueSceneData =
     dialogueScenes.find(
       (scene) =>
-        Number(scene.sceneNumber) ===
-        Number(selectedDialogueScene)
+        Number(
+          scene?.sceneNumber
+        ) ===
+        Number(
+          selectedDialogueScene
+        )
     ) ||
     dialogueScenes[0] ||
     null;
 
-  function getModuleStatus(moduleName) {
+  /* =======================================================
+     STATUS
+  ======================================================= */
+
+  function getModuleStatus(
+    moduleName
+  ) {
     switch (moduleName) {
       case "IDEA":
-        return production?.idea?.status === "ready"
+        return production?.idea
+          ?.status === "ready" ||
+          production?.idea
+            ?.status === "completed"
           ? "ready"
           : "waiting";
 
       case "PLAN":
-        return production?.story?.status === "ready"
+        return production?.story
+          ?.status === "ready" ||
+          production?.story
+            ?.status === "completed"
           ? "ready"
           : "waiting";
 
       case "CHARACTERS":
-        return characters.length > 0
+        return characters.length
           ? "ready"
           : "waiting";
 
       case "SCENES":
-        if (
-          production?.scenes?.status ===
-          "completed"
-        ) {
-          return "ready";
-        }
-
-        if (scenes.length > 0) {
-          return "planned";
-        }
-
-        return "waiting";
+        return production?.scenes
+          ?.status === "ready" ||
+          production?.scenes
+            ?.status === "completed"
+          ? "ready"
+          : scenes.length
+            ? "planned"
+            : "waiting";
 
       case "DIALOGUE":
-        if (
-          production?.dialogue?.status ===
-          "completed"
-        ) {
-          return "ready";
-        }
-
-        if (
-          production?.dialogue?.status ===
-          "ready" &&
-          dialoguePlan
-        ) {
-          return "ready";
-        }
-
-        return "waiting";
+        return production?.dialogue
+          ?.status === "ready" ||
+          production?.dialogue
+            ?.status === "completed"
+          ? "ready"
+          : "waiting";
 
       case "VOICE":
-        return availableVoices.length > 0
+        return production?.voices
+          ?.status === "ready" ||
+          production?.voices
+            ?.status === "completed"
+          ? "ready"
+          : availableVoices.length
+            ? "planned"
+            : "waiting";
+
+      case "VIDEO":
+        return production?.video
+          ?.status === "ready" ||
+          production?.video
+            ?.status === "completed"
           ? "ready"
           : "waiting";
 
       case "SOUND":
-        return generatedAudioUrl
+        return production?.sound
+          ?.status === "ready" ||
+          production?.sound
+            ?.status === "completed"
           ? "ready"
-          : "waiting";
+          : generatedAudioUrl
+            ? "ready"
+            : "waiting";
 
-      case "VIDEO":
-      case "TIMELINE":
-      case "PREVIEW":
-      case "EXPORT":
       default:
         return "waiting";
     }
   }
 
-  function getModuleSignal(status) {
+  function getModuleSignal(
+    moduleName
+  ) {
+    const status =
+      getModuleStatus(
+        moduleName
+      );
+
     if (status === "ready") {
-      return {
-        symbol: "🟢",
-        label: "READY",
-        color: "rgba(70,255,150,0.85)",
-      };
+      return "READY";
     }
 
     if (status === "planned") {
-      return {
-        symbol: "🟡",
-        label: "PLANNED",
-        color: "rgba(255,212,59,0.85)",
-      };
+      return "PLANNED";
     }
 
-    return {
-      symbol: "⚪",
-      label: "WAITING",
-      color: "rgba(255,255,255,0.42)",
-    };
+    return "WAITING";
   }
 
-  /* =========================================================
+  /* =======================================================
+     PLAN SAVE
+  ======================================================= */
+
+  function savePlan(plan) {
+    if (!plan) {
+      return;
+    }
+
+    const currentIdea =
+      production?.idea?.data
+        ?.prompt ||
+      ideaText.trim();
+
+    try {
+      const nextProduction =
+        changeStage(
+          "story",
+          {
+            mode: "manual",
+
+            plan: {
+              ...(story || {}),
+              ...plan,
+
+              id:
+                story?.id ||
+                makeId("story"),
+
+              title:
+                story?.title ||
+                "BOMBA AI Story",
+
+              createdAt:
+                story?.createdAt ||
+                new Date().toISOString(),
+            },
+
+            idea:
+              currentIdea,
+          }
+        );
+
+      setProduction(
+        nextProduction
+      );
+
+      setStoryStatus(
+        "PLAN saved successfully."
+      );
+    } catch (error) {
+      console.error(
+        "BOMBA PLAN error:",
+        error
+      );
+
+      setStoryStatus(
+        error?.message ||
+          "Unable to save PLAN."
+      );
+    }
+  }
+
+  /* =======================================================
      UI
-  ========================================================= */
+  ======================================================= */
 
   return (
-    <section
-      style={{
-        marginTop: "24px",
-        padding: "14px",
-        border:
-          "1px solid rgba(255,255,255,0.10)",
-        borderRadius: "14px",
-        background:
-          "rgba(255,255,255,0.025)",
-      }}
-    >
-      <div
-        style={{
-          marginBottom: "12px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "11px",
-            fontWeight: "700",
-            letterSpacing: "1.5px",
-            opacity: 0.65,
-          }}
-        >
+    <section className="w-full text-white">
+      {/* HEADER */}
+
+      <div className="mb-8">
+        <div className="mb-2 text-xs font-semibold tracking-[0.3em] text-yellow-400">
           BOMBA AI
         </div>
 
-        <h2
-          style={{
-            margin: "4px 0 3px",
-            fontSize: "18px",
-            fontWeight: "800",
-          }}
-        >
+        <h1 className="text-3xl font-black">
           VIDEO PRODUCTION
-        </h2>
+        </h1>
 
-        <p
-          style={{
-            margin: 0,
-            fontSize: "12px",
-            opacity: 0.6,
-          }}
-        >
-          Build your video from idea to export.
+        <p className="mt-2 text-sm text-white/50">
+          Build your production from IDEA
+          to final video.
         </p>
-      </div>
 
-      {production && (
-        <div
-          style={{
-            marginBottom: "10px",
-            padding: "8px 10px",
-            borderRadius: "8px",
-            background:
-              "rgba(255,212,59,0.045)",
-            border:
-              "1px solid rgba(255,212,59,0.10)",
-            fontSize: "8px",
-            opacity: 0.55,
-          }}
-        >
-          🧠 Production Brain connected
-          {" • "}
-          Project ready
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-green-400/20 bg-green-400/5 px-3 py-1.5 text-xs text-green-300">
+          <span className="h-2 w-2 rounded-full bg-green-400" />
+          Production Brain connected
         </div>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(2, minmax(0, 1fr))",
-          gap: "8px",
-        }}
-      >
-        {modules.map(
-          (module) => {
-            const moduleStatus =
-              getModuleStatus(
-                module.name
-              );
-
-            const signal =
-              getModuleSignal(
-                moduleStatus
-              );
-
-            return (
-              <button
-                key={module.number}
-                type="button"
-                onClick={() =>
-                  setActiveModule(
-                    module.name
-                  )
-                }
-                style={{
-                  width: "100%",
-                  minHeight: "58px",
-                  padding: "9px",
-                  borderRadius: "10px",
-                  border:
-                    activeModule ===
-                    module.name
-                      ? "1px solid rgba(255,212,59,0.65)"
-                      : "1px solid rgba(255,255,255,0.10)",
-                  background:
-                    activeModule ===
-                    module.name
-                      ? "rgba(255,212,59,0.08)"
-                      : "rgba(255,255,255,0.035)",
-                  color: "inherit",
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent:
-                      "space-between",
-                    gap: "8px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "18px",
-                        lineHeight: 1,
-                      }}
-                    >
-                      {module.icon}
-                    </span>
-
-                    <span>
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: "9px",
-                          opacity: 0.45,
-                          marginBottom: "2px",
-                        }}
-                      >
-                        {module.number}
-                      </span>
-
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: "11px",
-                          fontWeight: "800",
-                          letterSpacing: "0.5px",
-                        }}
-                      >
-                        {module.name}
-                      </span>
-                    </span>
-                  </div>
-
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "3px",
-                      fontSize: "7px",
-                      fontWeight: "800",
-                      color: signal.color,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {signal.symbol}
-                    {" "}
-                    {signal.label}
-                  </span>
-                </div>
-              </button>
-            );
-          }
-        )}
       </div>
 
-      {/* =====================================================
+      {/* MODULE GRID */}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        {modules.map((module) => (
+          <button
+            key={module.name}
+            type="button"
+            onClick={() =>
+              setActiveModule(
+                module.name
+              )
+            }
+            className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left transition hover:border-yellow-400/40 hover:bg-white/[0.07]"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-white/30">
+                {module.number}
+              </span>
+
+              <span className="text-lg">
+                {module.icon}
+              </span>
+            </div>
+
+            <div className="mt-3 text-xs font-bold tracking-wider">
+              {module.name}
+            </div>
+
+            <div className="mt-2 text-[10px] text-white/40">
+              {getModuleSignal(
+                module.name
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* ===================================================
           IDEA
-      ===================================================== */}
+      =================================================== */}
 
       {activeModule === "IDEA" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                PRODUCTION START
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                💡 Your Video Idea
-              </h3>
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 01
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                setActiveModule(null)
-              }
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
-            >
-              CLOSE
-            </button>
+            <h2 className="mt-2 text-2xl font-bold">
+              IDEA
+            </h2>
+
+            <p className="mt-2 text-sm text-white/50">
+              Start with the idea for your
+              movie, video, advert or story.
+            </p>
           </div>
 
-          <div
-            style={{
-              padding: "12px",
-              borderRadius: "10px",
-              border:
-                "1px solid rgba(255,212,59,0.30)",
-              background:
-                "rgba(255,212,59,0.07)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
-              }}
-            >
-              🧠 BOMBA DIRECTOR
-            </div>
+          <textarea
+            value={ideaText}
+            onChange={(event) =>
+              setIdeaText(
+                event.target.value
+              )
+            }
+            placeholder="Describe your movie, video, ad or story idea..."
+            rows={7}
+            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-yellow-400/50"
+          />
 
-            <div
-              style={{
-                fontSize: "9px",
-                opacity: 0.58,
-                lineHeight: 1.5,
-                marginBottom: "10px",
-              }}
-            >
-              Start with one idea. BOMBA will keep
-              this idea as the foundation of the
-              production.
-            </div>
-
-            <label
-              style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              DESCRIBE YOUR VIDEO IDEA
-            </label>
-
-            <textarea
-              value={ideaText}
-              onChange={(event) => {
-                setIdeaText(
-                  event.target.value
-                );
-
-                if (
-                  ideaStatus.startsWith(
-                    "❌"
-                  ) ||
-                  ideaStatus.startsWith(
-                    "⚠️"
-                  )
-                ) {
-                  setIdeaStatus(
-                    "Describe your movie, video, ad or story idea."
-                  );
-                }
-              }}
-              rows={7}
-              maxLength={10000}
-              placeholder="Example: A young Nigerian entrepreneur starts a tech company from a small room in Lagos and faces one major challenge..."
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
-              }}
-            />
-
-            <div
-              style={{
-                marginTop: "5px",
-                textAlign: "right",
-                fontSize: "8px",
-                opacity: 0.4,
-              }}
-            >
-              {ideaText.length} / 10000
-            </div>
-
+          <div className="mt-4 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={
                 saveIdeaToProduction
               }
-              disabled={
-                !ideaText.trim()
-              }
-              style={{
-                width: "100%",
-                marginTop: "9px",
-                padding: "12px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,212,59,0.45)",
-                background:
-                  "rgba(255,212,59,0.15)",
-                color: "inherit",
-                fontSize: "10px",
-                fontWeight: "800",
-                cursor:
-                  ideaText.trim()
-                    ? "pointer"
-                    : "not-allowed",
-                opacity:
-                  ideaText.trim()
-                    ? 1
-                    : 0.45,
-              }}
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black transition hover:bg-yellow-300"
             >
-              💡 SAVE IDEA TO BOMBA
+              SAVE IDEA
             </button>
-
-            <div
-              style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {ideaStatus}
-            </div>
-
-            {production?.idea?.status ===
-              "ready" && (
-              <div
-                style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background:
-                    "rgba(70,255,150,0.06)",
-                  border:
-                    "1px solid rgba(70,255,150,0.16)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "5px",
-                  }}
-                >
-                  ✅ IDEA CONNECTED TO PRODUCTION BRAIN
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                    opacity: 0.6,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  BOMBA has the idea. The next
-                  production stage is{" "}
-                  <strong>STORY</strong>.
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
-          STORY
-      ===================================================== */}
-
-      {activeModule === "PLAN" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                STORY ENGINE
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                📖 BOMBA STORY
-              </h3>
-            </div>
 
             <button
               type="button"
               onClick={() =>
                 setActiveModule(null)
               }
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5"
             >
               CLOSE
             </button>
           </div>
 
-          <div
-            style={{
-              padding: "12px",
-              borderRadius: "10px",
-              border:
-                "1px solid rgba(255,212,59,0.25)",
-              background:
-                "rgba(255,212,59,0.055)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                marginBottom: "6px",
-              }}
-            >
-              🧪 TEST MODE
-            </div>
-
-            <div
-              style={{
-                fontSize: "9px",
-                opacity: 0.6,
-                lineHeight: 1.5,
-                marginBottom: "10px",
-              }}
-            >
-              OpenAI is not required for this test.
-              BOMBA will build a structured test
-              story from the saved IDEA.
-            </div>
-
-            <div
-              style={{
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.22)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                marginBottom: "9px",
-              }}
-            >
-              <strong>Current IDEA:</strong>{" "}
-              {production?.idea?.data?.prompt ||
-                "No saved idea yet."}
-            </div>
-
-            <button
-              type="button"
-              onClick={buildTestStory}
-              disabled={
-                isBuildingStory ||
-                !production?.idea?.data?.prompt
-              }
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,212,59,0.45)",
-                background:
-                  "rgba(255,212,59,0.15)",
-                color: "inherit",
-                fontSize: "10px",
-                fontWeight: "800",
-                cursor:
-                  isBuildingStory
-                    ? "wait"
-                    : "pointer",
-                opacity:
-                  isBuildingStory ||
-                  !production?.idea?.data?.prompt
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              {isBuildingStory
-                ? "⏳ BUILDING STORY..."
-                : "📖 BUILD TEST STORY"}
-            </button>
-
-            <div
-              style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {storyStatus}
-            </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+            {ideaStatus}
           </div>
-
-          {story && (
-            <div
-              style={{
-                marginTop: "12px",
-                padding: "12px",
-                borderRadius: "10px",
-                background:
-                  "rgba(255,255,255,0.035)",
-                border:
-                  "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "13px",
-                  fontWeight: "800",
-                  marginBottom: "5px",
-                }}
-              >
-                🎬 {story.title}
-              </div>
-
-              <div
-                style={{
-                  fontSize: "9px",
-                  opacity: 0.65,
-                  lineHeight: 1.5,
-                  marginBottom: "10px",
-                }}
-              >
-                {story.logline}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: "7px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "9px",
-                  }}
-                >
-                  <strong>Genre:</strong>{" "}
-                  {story.genre}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                  }}
-                >
-                  <strong>Setting:</strong>{" "}
-                  {story.setting}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <strong>Beginning:</strong>{" "}
-                  {story.beginning}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <strong>Conflict:</strong>{" "}
-                  {story.conflict}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <strong>Turning Point:</strong>{" "}
-                  {story.turningPoint}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "9px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <strong>Ending:</strong>{" "}
-                  {story.ending}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: "10px",
-                  fontSize: "9px",
-                  fontWeight: "800",
-                }}
-              >
-                🎞️ {story.scenes?.length || 0} scenes
-                {" • "}
-                📷 {story.shots?.length || 0} shots
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* =====================================================
+      {/* ===================================================
+          PLAN
+      =================================================== */}
+
+      {activeModule === "PLAN" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 02
+            </div>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              PLAN
+            </h2>
+          </div>
+
+          <div className="space-y-5">
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Idea
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/60">
+                {ideaText ||
+                  "Save an IDEA first."}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Story
+              </label>
+
+              <textarea
+                defaultValue={
+                  story?.beginning || ""
+                }
+                onChange={(event) =>
+                  savePlan({
+                    beginning:
+                      event.target.value,
+                  })
+                }
+                placeholder="Describe what happens in the story..."
+                rows={4}
+                className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm outline-none placeholder:text-white/30 focus:border-yellow-400/50"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Characters
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+                {characters.length
+                  ? characters
+                      .map(
+                        (character) =>
+                          character.name
+                      )
+                      .join(", ")
+                  : "Characters will appear here after STORY generation."}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Scenes
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+                {scenes.length
+                  ? `${scenes.length} scenes prepared.`
+                  : "Scenes will be prepared after the STORY."}
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Shots
+              </label>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+                {shots.length
+                  ? `${shots.length} shots prepared.`
+                  : "Shots will be prepared from the STORY."}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={
+                buildTestStory
+              }
+              disabled={
+                isBuildingStory
+              }
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-50"
+            >
+              {isBuildingStory
+                ? "BUILDING..."
+                : "BUILD TEST STORY"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveModule(null)
+              }
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm text-white/60"
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+            {storyStatus}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================
           CHARACTERS
-      ===================================================== */}
+      =================================================== */}
 
       {activeModule ===
         "CHARACTERS" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                CHARACTER SYSTEM
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                👥 CHARACTERS
-              </h3>
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 03
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                setActiveModule(null)
-              }
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
-            >
-              CLOSE
-            </button>
+            <h2 className="mt-2 text-2xl font-bold">
+              CHARACTERS
+            </h2>
           </div>
 
-          <div
-            style={{
-              padding: "10px",
-              borderRadius: "9px",
-              background:
-                "rgba(255,255,255,0.035)",
-              border:
-                "1px solid rgba(255,255,255,0.08)",
-              marginBottom: "10px",
-            }}
-          >
-            <label
-              style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              CHARACTER VOICE LANGUAGE
+          <div className="mb-5">
+            <label className="mb-2 block text-sm font-semibold">
+              Voice Language
             </label>
 
             <select
-              value={characterLanguage}
-              onChange={(event) =>
-                setCharacterLanguage(
-                  event.target.value
-                )
+              value={
+                characterLanguage
               }
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(0,0,0,0.35)",
-                color: "inherit",
-                fontSize: "10px",
+              onChange={(event) => {
+                const language =
+                  event.target.value;
+
+                setCharacterLanguage(
+                  language
+                );
               }}
+              className="rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
             >
               <option value="pcm">
                 Nigerian Pidgin
@@ -2628,2295 +2550,941 @@ localStorage.setItem(
                 Hausa
               </option>
             </select>
-
-            <div
-              style={{
-                marginTop: "8px",
-                fontSize: "8px",
-                opacity: 0.5,
-                lineHeight: 1.5,
-              }}
-            >
-              Changing the language here prepares
-              the character voice assignments for the
-              production.
-            </div>
           </div>
 
-          <div
-            style={{
-              padding: "9px",
-              borderRadius: "8px",
-              background:
-                "rgba(0,0,0,0.20)",
-              fontSize: "9px",
-              textAlign: "center",
-              marginBottom: "10px",
-            }}
-          >
-            {characterStatus}
-          </div>
-
-          {!characters.length && (
-            <div
-              style={{
-                padding: "12px",
-                borderRadius: "9px",
-                background:
-                  "rgba(255,255,255,0.035)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                opacity: 0.65,
-              }}
-            >
-              Build the STORY first. BOMBA will
-              create the characters from the story
-              and prepare their voice assignments.
-            </div>
-          )}
-
-          {characters.length > 0 && (
-            <div
-              style={{
-                display: "grid",
-                gap: "8px",
-              }}
-            >
-              {characters.map(
-                (character, index) => (
+          <div className="grid gap-3 md:grid-cols-2">
+            {characters.length ? (
+              characters.map(
+                (character) => (
                   <div
                     key={
                       character.id ||
-                      `character-${index}`
+                      character.name
                     }
-                    style={{
-                      padding: "11px",
-                      borderRadius: "9px",
-                      background:
-                        "rgba(255,255,255,0.035)",
-                      border:
-                        "1px solid rgba(255,255,255,0.08)",
-                    }}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent:
-                          "space-between",
-                        gap: "8px",
-                      }}
-                    >
+                    <div className="flex items-start justify-between">
                       <div>
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "800",
-                          }}
-                        >
+                        <div className="font-bold">
                           {character.name}
                         </div>
 
-                        <div
-                          style={{
-                            marginTop: "2px",
-                            fontSize: "8px",
-                            opacity: 0.5,
-                          }}
-                        >
+                        <div className="mt-1 text-xs text-white/40">
                           {character.role}
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: "8px",
-                          padding:
-                            "4px 7px",
-                          borderRadius: "6px",
-                          background:
-                            character.voice
-                              ?.status ===
-                            "ready"
-                              ? "rgba(70,255,150,0.08)"
-                              : "rgba(255,212,59,0.08)",
-                          border:
-                            character.voice
-                              ?.status ===
-                            "ready"
-                              ? "1px solid rgba(70,255,150,0.18)"
-                              : "1px solid rgba(255,212,59,0.18)",
-                        }}
-                      >
-                        {character.voice
-                          ?.status ===
-                        "ready"
-                          ? "VOICE READY"
-                          : "VOICE SLOT"}
-                      </div>
+                      <span className="text-xl">
+                        👤
+                      </span>
                     </div>
 
-                    <div
-                      style={{
-                        marginTop: "8px",
-                        fontSize: "9px",
-                        lineHeight: 1.5,
-                        opacity: 0.62,
-                      }}
-                    >
-                      {character.description}
+                    <div className="mt-4 text-xs text-white/50">
+                      Voice:{" "}
+                      {character.voiceName ||
+                        "Reserved"}
                     </div>
 
-                    <div
-                      style={{
-                        marginTop: "8px",
-                        padding: "7px",
-                        borderRadius: "7px",
-                        background:
-                          "rgba(0,0,0,0.22)",
-                        fontSize: "8px",
-                      }}
-                    >
-                      🎙️{" "}
-                      <strong>
-                        {character.voice
-                          ?.voiceName ||
-                          "Reserved Voice"}
-                      </strong>
-                      {" • "}
-                      {character.voice
-                        ?.voiceId ||
-                        character.voice
-                          ?.slot ||
-                        "Pending"}
+                    <div className="mt-1 text-xs text-white/40">
+                      {character.voiceStatus ||
+                        "reserved"}
                     </div>
                   </div>
                 )
-              )}
-            </div>
-          )}
+              )
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-white/50 md:col-span-2">
+                Build the STORY first.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={
+                buildTestStory
+              }
+              disabled={
+                isBuildingStory
+              }
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-50"
+            >
+              {isBuildingStory
+                ? "BUILDING..."
+                : "REFRESH CHARACTERS"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveModule(null)
+              }
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm text-white/60"
+            >
+              CLOSE
+            </button>
+          </div>
+
+          <div className="mt-4 text-sm text-white/50">
+            {characterStatus}
+          </div>
         </div>
       )}
 
-      {/* =====================================================
-          SCENE SYSTEM
-      ===================================================== */}
+      {/* ===================================================
+          SCENES
+      =================================================== */}
 
       {activeModule === "SCENES" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                SCENE SYSTEM
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                🎬 SCENES
-              </h3>
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 04
             </div>
 
+            <h2 className="mt-2 text-2xl font-bold">
+              SCENE SYSTEM
+            </h2>
+          </div>
+
+          <div className="mb-5 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() =>
-                setActiveModule(null)
+              onClick={
+                buildScenes
               }
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
-            >
-              CLOSE
-            </button>
-          </div>
-
-          <div
-            style={{
-              padding: "10px",
-              borderRadius: "9px",
-              background:
-                scenes.length > 0
-                  ? "rgba(255,212,59,0.06)"
-                  : "rgba(255,255,255,0.035)",
-              border:
-                scenes.length > 0
-                  ? "1px solid rgba(255,212,59,0.18)"
-                  : "1px solid rgba(255,255,255,0.08)",
-              marginBottom: "10px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              {scenes.length > 0
-                ? "🟡 SCENE PLAN CONNECTED"
-                : "⚪ SCENE PLAN WAITING"}
-            </div>
-
-            <div
-              style={{
-                fontSize: "8px",
-                opacity: 0.58,
-                lineHeight: 1.5,
-              }}
-            >
-              {scenes.length > 0
-                ? `${scenes.length} scenes and ${shots.length} planned shots are being read directly from the STORY.`
-                : "Build the STORY first. The Scene System will read the scenes and shots from the STORY."}
-            </div>
-          </div>
-
-          {scenes.length === 0 && (
-            <div
-              style={{
-                padding: "12px",
-                borderRadius: "9px",
-                background:
-                  "rgba(255,255,255,0.035)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                opacity: 0.65,
-              }}
-            >
-              No scene plan is available yet.
-              Build the TEST STORY from 02 PLAN first.
-            </div>
-          )}
-
-          {scenes.length > 0 && (
-            <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(2, minmax(0, 1fr))",
-                  gap: "7px",
-                  marginBottom: "10px",
-                }}
-              >
-                {scenes.map(
-                  (scene) => {
-                    const active =
-                      Number(
-                        selectedScene?.sceneNumber
-                      ) ===
-                      Number(
-                        scene.sceneNumber
-                      );
-
-                    const sceneShots =
-                      shots.filter(
-                        (shot) =>
-                          Number(
-                            shot.sceneNumber
-                          ) ===
-                          Number(
-                            scene.sceneNumber
-                          )
-                      );
-
-                    return (
-                      <button
-                        key={
-                          scene.sceneNumber
-                        }
-                        type="button"
-                        onClick={() =>
-                          setSelectedSceneNumber(
-                            scene.sceneNumber
-                          )
-                        }
-                        style={{
-                          padding: "9px",
-                          borderRadius: "8px",
-                          border: active
-                            ? "1px solid rgba(255,212,59,0.55)"
-                            : "1px solid rgba(255,255,255,0.08)",
-                          background: active
-                            ? "rgba(255,212,59,0.10)"
-                            : "rgba(255,255,255,0.035)",
-                          color: "inherit",
-                          textAlign: "left",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "8px",
-                            opacity: 0.5,
-                            marginBottom: "3px",
-                          }}
-                        >
-                          SCENE{" "}
-                          {scene.sceneNumber}
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "800",
-                          }}
-                        >
-                          {scene.title}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: "4px",
-                            fontSize: "7px",
-                            opacity: 0.5,
-                          }}
-                        >
-                          {sceneShots.length} shot
-                          {sceneShots.length === 1
-                            ? ""
-                            : "s"}
-                        </div>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-
-              {selectedScene && (
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: "10px",
-                    background:
-                      "rgba(255,255,255,0.035)",
-                    border:
-                      "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent:
-                        "space-between",
-                      gap: "10px",
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "8px",
-                          opacity: 0.5,
-                          marginBottom: "3px",
-                        }}
-                      >
-                        SCENE{" "}
-                        {selectedScene.sceneNumber}
-                      </div>
-
-                      <div
-                        style={{
-                          fontSize: "15px",
-                          fontWeight: "800",
-                        }}
-                      >
-                        {selectedScene.title}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: "4px 7px",
-                        borderRadius: "6px",
-                        background:
-                          "rgba(255,212,59,0.08)",
-                        border:
-                          "1px solid rgba(255,212,59,0.18)",
-                        fontSize: "7px",
-                        fontWeight: "800",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      🟡 PLANNED
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "7px",
-                      marginTop: "10px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "9px",
-                      }}
-                    >
-                      <strong>📍 Location:</strong>{" "}
-                      {selectedScene.location ||
-                        "Not specified"}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: "9px",
-                      }}
-                    >
-                      <strong>🕐 Time:</strong>{" "}
-                      {selectedScene.time ||
-                        "Not specified"}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: "9px",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <strong>🎭 Action:</strong>{" "}
-                      {selectedScene.description ||
-                        "No action description yet."}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: "9px",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <strong>🎯 Purpose:</strong>{" "}
-                      {selectedScene.purpose ||
-                        "No scene purpose yet."}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      fontSize: "10px",
-                      fontWeight: "800",
-                    }}
-                  >
-                    📷 SHOTS
-                  </div>
-
-                  {selectedSceneShots.length ===
-                    0 && (
-                    <div
-                      style={{
-                        marginTop: "7px",
-                        padding: "9px",
-                        borderRadius: "7px",
-                        background:
-                          "rgba(0,0,0,0.20)",
-                        fontSize: "8px",
-                        opacity: 0.6,
-                      }}
-                    >
-                      No shots planned for this scene yet.
-                    </div>
-                  )}
-
-                  {selectedSceneShots.length >
-                    0 && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "7px",
-                        marginTop: "7px",
-                      }}
-                    >
-                      {selectedSceneShots.map(
-                        (shot) => (
-                          <div
-                            key={
-                              shot.shotNumber
-                            }
-                            style={{
-                              padding: "9px",
-                              borderRadius: "8px",
-                              background:
-                                "rgba(0,0,0,0.20)",
-                              border:
-                                "1px solid rgba(255,255,255,0.07)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent:
-                                  "space-between",
-                                gap: "8px",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  fontSize: "9px",
-                                  fontWeight: "800",
-                                }}
-                              >
-                                SHOT{" "}
-                                {
-                                  shot.shotNumber
-                                }
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: "7px",
-                                  opacity: 0.5,
-                                }}
-                              >
-                                {shot.shotType ||
-                                  "Shot"}
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                marginTop: "5px",
-                                fontSize: "8px",
-                                opacity: 0.62,
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {shot.description ||
-                                "No shot description yet."}
-                            </div>
-
-                            <div
-                              style={{
-                                marginTop: "5px",
-                                fontSize: "7px",
-                                opacity: 0.45,
-                              }}
-                            >
-                              🎥{" "}
-                              {shot.camera ||
-                                "Camera not specified"}
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* =====================================================
-          DIALOGUE SYSTEM
-      ===================================================== */}
-
-      {activeModule === "DIALOGUE" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                DIALOGUE SYSTEM
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                💬 DIALOGUE
-              </h3>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setActiveModule(null)
+              disabled={
+                !story ||
+                !scenes.length
               }
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-40"
             >
-              CLOSE
+              PREPARE SCENES
             </button>
-          </div>
-
-          <div
-            style={{
-              padding: "10px",
-              borderRadius: "9px",
-              background:
-                dialoguePlan
-                  ? "rgba(70,255,150,0.06)"
-                  : "rgba(255,255,255,0.035)",
-              border:
-                dialoguePlan
-                  ? "1px solid rgba(70,255,150,0.18)"
-                  : "1px solid rgba(255,255,255,0.08)",
-              marginBottom: "10px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              {dialoguePlan
-                ? "🟢 DIALOGUE CONNECTED"
-                : "⚪ DIALOGUE WAITING"}
-            </div>
-
-            <div
-              style={{
-                fontSize: "8px",
-                opacity: 0.58,
-                lineHeight: 1.5,
-              }}
-            >
-              {dialoguePlan
-                ? `${dialoguePlan.totalLines || 0} dialogue lines are connected to ${dialogueScenes.length || 0} scenes.`
-                : "BOMBA will build structured dialogue from the STORY, CHARACTERS and SCENES."}
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "10px",
-              borderRadius: "9px",
-              background:
-                "rgba(255,255,255,0.035)",
-              border:
-                "1px solid rgba(255,255,255,0.08)",
-              marginBottom: "10px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              🧪 TEST MODE
-            </div>
-
-            <div
-              style={{
-                fontSize: "8px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "9px",
-              }}
-            >
-              No OpenAI call is required yet. This
-              test creates structured dialogue so the
-              next VOICE module can consume real
-              character dialogue automatically.
-            </div>
-
-            <div
-              style={{
-                padding: "8px",
-                borderRadius: "7px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "8px",
-                lineHeight: 1.5,
-                marginBottom: "8px",
-              }}
-            >
-              <strong>Story:</strong>{" "}
-              {story?.title ||
-                "No story available."}
-              <br />
-              <strong>Characters:</strong>{" "}
-              {characters.length}
-              <br />
-              <strong>Scenes:</strong>{" "}
-              {scenes.length}
-            </div>
 
             <button
               type="button"
               onClick={
-                buildTestDialogue
+                buildShots
               }
               disabled={
-                isBuildingDialogue ||
-                !story ||
-                !characters.length
+                !scenes.length ||
+                !shots.length
               }
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,212,59,0.45)",
-                background:
-                  "rgba(255,212,59,0.15)",
-                color: "inherit",
-                fontSize: "10px",
-                fontWeight: "800",
-                cursor:
-                  isBuildingDialogue
-                    ? "wait"
-                    : "pointer",
-                opacity:
-                  isBuildingDialogue ||
-                  !story ||
-                  !characters.length
-                    ? 0.5
-                    : 1,
-              }}
+              className="rounded-xl border border-yellow-400/30 px-5 py-3 text-sm font-bold text-yellow-300 disabled:opacity-40"
             >
-              {isBuildingDialogue
-                ? "⏳ BUILDING DIALOGUE..."
-                : "💬 BUILD TEST DIALOGUE"}
+              PREPARE SHOTS
             </button>
-
-            <div
-              style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {dialogueStatus}
-            </div>
           </div>
 
-          {dialoguePlan && (
-            <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(2, minmax(0, 1fr))",
-                  gap: "7px",
-                  marginBottom: "10px",
-                }}
-              >
-                {dialogueScenes.map(
-                  (scene) => {
-                    const active =
+          <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
+            <div className="space-y-2">
+              {scenes.map(
+                (scene) => (
+                  <button
+                    key={
+                      scene.sceneNumber
+                    }
+                    type="button"
+                    onClick={() =>
+                      setSelectedSceneNumber(
+                        scene.sceneNumber
+                      )
+                    }
+                    className={`w-full rounded-xl border p-3 text-left ${
                       Number(
-                        selectedDialogueScene
+                        selectedSceneNumber
                       ) ===
                       Number(
                         scene.sceneNumber
-                      );
-
-                    return (
-                      <button
-                        key={
-                          scene.sceneNumber
-                        }
-                        type="button"
-                        onClick={() =>
-                          setSelectedDialogueScene(
-                            scene.sceneNumber
-                          )
-                        }
-                        style={{
-                          padding: "9px",
-                          borderRadius: "8px",
-                          border: active
-                            ? "1px solid rgba(255,212,59,0.55)"
-                            : "1px solid rgba(255,255,255,0.08)",
-                          background: active
-                            ? "rgba(255,212,59,0.10)"
-                            : "rgba(255,255,255,0.035)",
-                          color: "inherit",
-                          textAlign: "left",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "8px",
-                            opacity: 0.5,
-                            marginBottom: "3px",
-                          }}
-                        >
-                          SCENE{" "}
-                          {scene.sceneNumber}
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "800",
-                          }}
-                        >
-                          {scene.title}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: "4px",
-                            fontSize: "7px",
-                            opacity: 0.5,
-                          }}
-                        >
-                          {scene.lines?.length ||
-                            0}{" "}
-                          lines
-                        </div>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-
-              {selectedDialogueSceneData && (
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: "10px",
-                    background:
-                      "rgba(255,255,255,0.035)",
-                    border:
-                      "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent:
-                        "space-between",
-                      gap: "10px",
-                    }}
+                      )
+                        ? "border-yellow-400/50 bg-yellow-400/10"
+                        : "border-white/10 bg-white/5"
+                    }`}
                   >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "8px",
-                          opacity: 0.5,
-                          marginBottom: "3px",
-                        }}
-                      >
-                        SCENE{" "}
+                    <div className="text-xs text-white/30">
+                      SCENE{" "}
+                      {
+                        scene.sceneNumber
+                      }
+                    </div>
+
+                    <div className="mt-1 text-sm font-bold">
+                      {scene.title}
+                    </div>
+                  </button>
+                )
+              )}
+            </div>
+
+            <div>
+              {selectedScene ? (
+                <>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                    <div className="text-xl font-bold">
+                      {
+                        selectedScene.title
+                      }
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-sm text-white/50 sm:grid-cols-2">
+                      <div>
+                        Location:{" "}
                         {
-                          selectedDialogueSceneData.sceneNumber
+                          selectedScene.location
                         }
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: "15px",
-                          fontWeight: "800",
-                        }}
-                      >
+                      <div>
+                        Time:{" "}
                         {
-                          selectedDialogueSceneData.title
+                          selectedScene.time
                         }
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        padding: "4px 7px",
-                        borderRadius: "6px",
-                        background:
-                          "rgba(70,255,150,0.08)",
-                        border:
-                          "1px solid rgba(70,255,150,0.18)",
-                        fontSize: "7px",
-                        fontWeight: "800",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      🟢 READY
+                    <p className="mt-4 text-sm leading-6 text-white/60">
+                      {
+                        selectedScene.description
+                      }
+                    </p>
+
+                    <div className="mt-3 text-xs text-yellow-400">
+                      Purpose:{" "}
+                      {
+                        selectedScene.purpose
+                      }
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      marginTop: "9px",
-                      padding: "8px",
-                      borderRadius: "7px",
-                      background:
-                        "rgba(0,0,0,0.20)",
-                      fontSize: "8px",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <strong>Language:</strong>{" "}
-                    {dialoguePlan.language}
-                    <br />
-                    <strong>Estimated dialogue:</strong>{" "}
-                    {
-                      selectedDialogueSceneData.estimatedDialogueDurationSec
-                    }
-                    s
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "8px",
-                      marginTop: "10px",
-                    }}
-                  >
-                    {(
-                      selectedDialogueSceneData.lines ||
-                      []
-                    ).map(
-                      (line) => (
+                  <div className="mt-5 space-y-3">
+                    {selectedSceneShots.map(
+                      (shot) => (
                         <div
                           key={
-                            line.id
+                            shot.shotNumber
                           }
-                          style={{
-                            padding: "10px",
-                            borderRadius: "8px",
-                            background:
-                              "rgba(0,0,0,0.20)",
-                            border:
-                              "1px solid rgba(255,255,255,0.07)",
-                          }}
+                          className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                         >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent:
-                                "space-between",
-                              gap: "8px",
-                            }}
-                          >
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: "10px",
-                                  fontWeight: "800",
-                                }}
-                              >
-                                {line.characterName}
-                              </div>
-
-                              <div
-                                style={{
-                                  marginTop: "2px",
-                                  fontSize: "7px",
-                                  opacity: 0.45,
-                                }}
-                              >
-                                {line.role}
-                                {" • "}
-                                {line.emotion}
-                              </div>
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs font-bold text-yellow-400">
+                              SHOT{" "}
+                              {
+                                shot.shotNumber
+                              }
                             </div>
 
-                            <div
-                              style={{
-                                fontSize: "7px",
-                                color:
-                                  line.voice
-                                    ?.status ===
-                                  "ready"
-                                    ? "rgba(70,255,150,0.85)"
-                                    : "rgba(255,212,59,0.85)",
-                                fontWeight: "800",
-                                textAlign:
-                                  "right",
-                              }}
-                            >
-                              🎙️{" "}
-                              {line.voice
-                                ?.voiceName ||
-                                "Reserved Voice"}
-                              <br />
-                              {line.voice
-                                ?.voiceId ||
-                                line.voice
-                                  ?.slot ||
-                                "Pending"}
+                            <div className="text-xs text-white/30">
+                              {
+                                shot.shotType
+                              }
                             </div>
                           </div>
 
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              fontSize: "10px",
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            “{line.text}”
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: "7px",
-                              fontSize: "7px",
-                              opacity: 0.45,
-                            }}
-                          >
-                            ⏱️ Estimated{" "}
+                          <p className="mt-3 text-sm text-white/70">
                             {
-                              line.timing
-                                ?.durationEstimateSec
+                              shot.description
                             }
-                            s
-                            {" • "}
-                            {line.language}
+                          </p>
+
+                          <div className="mt-3 text-xs text-white/40">
+                            Camera:{" "}
+                            {
+                              shot.camera
+                            }
                           </div>
                         </div>
                       )
                     )}
                   </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-white/50">
+                  Build the STORY first.
                 </div>
               )}
+            </div>
+          </div>
 
-              <div
-                style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background:
-                    "rgba(255,212,59,0.045)",
-                  border:
-                    "1px solid rgba(255,212,59,0.10)",
-                  fontSize: "8px",
-                  lineHeight: 1.5,
-                  opacity: 0.7,
-                }}
-              >
-                🧠 Production Brain now has structured
-                dialogue. The next VOICE module can use
-                each character's dialogue and voice
-                assignment instead of asking the user to
-                paste the script manually.
-              </div>
-            </>
-          )}
+          <div className="mt-5 text-sm text-white/50">
+            {sceneStatus}
+          </div>
         </div>
       )}
 
-      {/* =====================================================
-          VOICE STUDIO
-      ===================================================== */}
+      {/* ===================================================
+          DIALOGUE
+      =================================================== */}
+
+      {activeModule ===
+        "DIALOGUE" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 05
+            </div>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              DIALOGUE SYSTEM
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              buildTestDialogue
+            }
+            disabled={
+              isBuildingDialogue ||
+              !story ||
+              !characters.length
+            }
+            className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-40"
+          >
+            {isBuildingDialogue
+              ? "BUILDING..."
+              : "BUILD TEST DIALOGUE"}
+          </button>
+
+          {dialogueScenes.length >
+            0 && (
+            <div className="mt-6 flex flex-wrap gap-2">
+              {dialogueScenes.map(
+                (scene) => (
+                  <button
+                    key={
+                      scene.sceneNumber
+                    }
+                    type="button"
+                    onClick={() =>
+                      setSelectedDialogueScene(
+                        scene.sceneNumber
+                      )
+                    }
+                    className={`rounded-lg px-3 py-2 text-xs ${
+                      Number(
+                        selectedDialogueScene
+                      ) ===
+                      Number(
+                        scene.sceneNumber
+                      )
+                        ? "bg-yellow-400 text-black"
+                        : "bg-white/5 text-white/60"
+                    }`}
+                  >
+                    Scene{" "}
+                    {
+                      scene.sceneNumber
+                    }
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
+          <div className="mt-6 space-y-3">
+            {safeArray(
+              selectedDialogueSceneData
+                ?.lines
+            ).map((line) => (
+              <div
+                key={
+                  line.id ||
+                  makeId("line")
+                }
+                className="rounded-2xl border border-white/10 bg-white/5 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-bold">
+                    {
+                      line.characterName
+                    }
+                  </div>
+
+                  <div className="text-xs text-yellow-400">
+                    {
+                      line.emotion
+                    }
+                  </div>
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-white/70">
+                  {line.text}
+                </p>
+
+                <div className="mt-3 text-xs text-white/40">
+                  Voice:{" "}
+                  {
+                    line.voice
+                      ?.name
+                  }{" "}
+                  ·{" "}
+                  {
+                    line.voice
+                      ?.status
+                  }
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 text-sm text-white/50">
+            {dialogueStatus}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================
+          VOICE
+      =================================================== */}
 
       {activeModule === "VOICE" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                VOICE STUDIO
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                🎙️ AI Voice
-              </h3>
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 06
             </div>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              VOICE STUDIO
+            </h2>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Language
+              </label>
+
+              <select
+                value={
+                  voiceLanguage
+                }
+                onChange={(event) =>
+                  setVoiceLanguage(
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+              >
+                <option value="pcm">
+                  Nigerian Pidgin
+                </option>
+
+                <option value="ig">
+                  Igbo
+                </option>
+
+                <option value="yo">
+                  Yoruba
+                </option>
+
+                <option value="ha">
+                  Hausa
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Voice
+              </label>
+
+              <select
+                value={voiceId}
+                onChange={(event) =>
+                  setVoiceId(
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-sm outline-none"
+              >
+                {availableVoices.map(
+                  (voice) => (
+                    <option
+                      key={voice.id}
+                      value={voice.id}
+                    >
+                      {voice.name} —{" "}
+                      {voice.gender}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+          </div>
+
+          <textarea
+            value={voiceText}
+            onChange={(event) =>
+              setVoiceText(
+                event.target.value
+              )
+            }
+            rows={7}
+            placeholder="Enter the text you want BOMBA to speak..."
+            className="mt-5 w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm outline-none placeholder:text-white/30 focus:border-yellow-400/50"
+          />
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={
+                generateAIVoice
+              }
+              disabled={
+                isGeneratingVoice
+              }
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-40"
+            >
+              {isGeneratingVoice
+                ? "GENERATING..."
+                : "GENERATE AI VOICE"}
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                playGeneratedVoice
+              }
+              disabled={
+                !generatedVoiceUrl
+              }
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm disabled:opacity-30"
+            >
+              ▶ PLAY
+            </button>
 
             <button
               type="button"
               onClick={() => {
                 stopGeneratedVoice();
-                setActiveModule(null);
+                setActiveModule(
+                  null
+                );
               }}
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm text-white/60"
             >
               CLOSE
             </button>
           </div>
 
-          <div
-            style={{
-              padding: "12px",
-              borderRadius: "10px",
-              border:
-                "1px solid rgba(255,212,59,0.30)",
-              background:
-                "rgba(255,212,59,0.07)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
-              }}
-            >
-              ✨ BOMBA AI VOICE GENERATOR
-            </div>
-
-            <div
-              style={{
-                fontSize: "9px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "10px",
-              }}
-            >
-              Choose a real 9jaLingo speaker and
-              turn your dialogue into AI speech.
-            </div>
-
-            <label
-              style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              LANGUAGE
-            </label>
-
-            <select
-              value={voiceLanguage}
-              onChange={(event) =>
-                setVoiceLanguage(
-                  event.target.value
-                )
+          {generatedVoiceUrl && (
+            <audio
+              controls
+              preload="metadata"
+              src={
+                generatedVoiceUrl
               }
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px",
-                marginBottom: "9px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(0,0,0,0.35)",
-                color: "inherit",
-                fontSize: "10px",
-              }}
-            >
-              <option value="pcm">
-                Nigerian Pidgin
-              </option>
-
-              <option value="yo">
-                Yoruba
-              </option>
-
-              <option value="ig">
-                Igbo
-              </option>
-
-              <option value="ha">
-                Hausa
-              </option>
-            </select>
-
-            <label
-              style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              9JALINGO VOICE
-            </label>
-
-            <select
-              value={voiceId}
-              onChange={(event) =>
-                setVoiceId(
-                  event.target.value
-                )
-              }
-              disabled={isGeneratingVoice}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px",
-                marginBottom: "9px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,212,59,0.35)",
-                background:
-                  "rgba(0,0,0,0.35)",
-                color: "inherit",
-                fontSize: "10px",
-                outline: "none",
-              }}
-            >
-              {availableVoices.map(
-                (voice) => (
-                  <option
-                    key={voice.id}
-                    value={voice.id}
-                  >
-                    {voice.name}
-                    {voice.gender
-                      ? ` — ${voice.gender}`
-                      : ""}
-                    {` (${voice.id})`}
-                  </option>
-                )
-              )}
-            </select>
-
-            <div
-              style={{
-                fontSize: "8px",
-                opacity: 0.45,
-                marginBottom: "9px",
-              }}
-            >
-              {availableVoices.length} confirmed
-              9jaLingo speaker options.
-            </div>
-
-            <label
-              style={{
-                display: "block",
-                fontSize: "9px",
-                fontWeight: "800",
-                marginBottom: "5px",
-              }}
-            >
-              DIALOGUE / SCRIPT
-            </label>
-
-            <textarea
-              value={voiceText}
-              onChange={(event) =>
-                setVoiceText(
-                  event.target.value
-                )
-              }
-              rows={6}
-              maxLength={5000}
-              placeholder="Enter the dialogue you want your AI character to speak..."
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
+              className="mt-5 w-full"
+              onPlay={(event) => {
+                generatedVoiceRef.current =
+                  event.currentTarget;
               }}
             />
+          )}
 
-            <div
-              style={{
-                marginTop: "5px",
-                textAlign: "right",
-                fontSize: "8px",
-                opacity: 0.4,
-              }}
-            >
-              {voiceText.length} / 5000
-            </div>
-
-            <button
-              type="button"
-              onClick={generateAIVoice}
-              disabled={isGeneratingVoice}
-              style={{
-                width: "100%",
-                marginTop: "9px",
-                padding: "12px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,212,59,0.45)",
-                background:
-                  "rgba(255,212,59,0.15)",
-                color: "inherit",
-                fontSize: "10px",
-                fontWeight: "800",
-                cursor:
-                  isGeneratingVoice
-                    ? "wait"
-                    : "pointer",
-                opacity:
-                  isGeneratingVoice
-                    ? 0.65
-                    : 1,
-              }}
-            >
-              {isGeneratingVoice
-                ? "⏳ CREATING AI VOICE..."
-                : "🎙️ GENERATE AI VOICE"}
-            </button>
-
-            <div
-              style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {generatedVoiceStatus}
-            </div>
-
-            {generatedVoiceError && (
-              <div
-                style={{
-                  marginTop: "7px",
-                  padding: "8px",
-                  borderRadius: "7px",
-                  background:
-                    "rgba(255,70,70,0.08)",
-                  border:
-                    "1px solid rgba(255,70,70,0.20)",
-                  fontSize: "8px",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
-                }}
-              >
-                {generatedVoiceError}
-              </div>
-            )}
-
-            {generatedVoiceUrl && (
-              <div
-                style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background:
-                    "rgba(0,0,0,0.25)",
-                  border:
-                    "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "7px",
-                  }}
-                >
-                  ✅ AI VOICE READY
-                </div>
-
-                <audio
-                  controls
-                  preload="metadata"
-                  src={generatedVoiceUrl}
-                  style={{
-                    width: "100%",
-                    height: "40px",
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={
-                    playGeneratedVoice
-                  }
-                  style={{
-                    width: "100%",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border:
-                      "1px solid rgba(255,212,59,0.35)",
-                    background:
-                      "rgba(255,212,59,0.08)",
-                    color: "inherit",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    cursor: "pointer",
-                  }}
-                >
-                  ▶️ PLAY AI VOICE
-                </button>
-              </div>
-            )}
+          <div className="mt-4 text-sm text-white/50">
+            {generatedVoiceStatus}
           </div>
+
+          {generatedVoiceError && (
+            <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+              {
+                generatedVoiceError
+              }
+            </div>
+          )}
         </div>
       )}
 
-{/* =====================================================
-    VIDEO PRODUCTION SYSTEM
-===================================================== */}
+      {/* ===================================================
+          VIDEO
+      =================================================== */}
 
-{activeModule === "VIDEO" && (
-  <div
-    style={{
-      marginTop: "14px",
-      padding: "14px",
-      borderRadius: "12px",
-      border:
-        "1px solid rgba(255,212,59,0.20)",
-      background:
-        "rgba(255,212,59,0.04)",
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "10px",
-        marginBottom: "12px",
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: "10px",
-            fontWeight: "700",
-            letterSpacing: "1px",
-            opacity: 0.55,
-          }}
-        >
-          VIDEO PRODUCTION SYSTEM
-        </div>
+      {activeModule === "VIDEO" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 07
+            </div>
 
-        <h3
-          style={{
-            margin: "4px 0 0",
-            fontSize: "16px",
-            fontWeight: "800",
-          }}
-        >
-          🎥 VIDEO
-        </h3>
-      </div>
-
-      <button
-        type="button"
-        onClick={() =>
-          setActiveModule(null)
-        }
-        style={{
-          border:
-            "1px solid rgba(255,255,255,0.12)",
-          background:
-            "rgba(255,255,255,0.05)",
-          color: "inherit",
-          borderRadius: "8px",
-          padding: "6px 9px",
-          fontSize: "11px",
-          cursor: "pointer",
-        }}
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div
-      style={{
-        padding: "12px",
-        borderRadius: "10px",
-        border:
-          "1px solid rgba(255,212,59,0.30)",
-        background:
-          "rgba(255,212,59,0.07)",
-        marginBottom: "10px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "10px",
-          fontWeight: "800",
-          letterSpacing: "1px",
-          marginBottom: "5px",
-        }}
-      >
-        🎬 BOMBA AI VIDEO ENGINE
-      </div>
-
-      <div
-        style={{
-          fontSize: "9px",
-          opacity: 0.55,
-          lineHeight: 1.5,
-        }}
-      >
-        The Video Engine connects your STORY,
-        SCENES, SHOTS, DIALOGUE, VOICE and SOUND
-        into one production plan.
-      </div>
-    </div>
-
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns:
-          "repeat(2, minmax(0, 1fr))",
-        gap: "7px",
-        marginBottom: "10px",
-      }}
-    >
-      {[
-        {
-          label: "STORY",
-          ready: Boolean(story),
-          value: story?.title || "Waiting",
-        },
-        {
-          label: "SCENES",
-          ready: scenes.length > 0,
-          value: `${scenes.length} scenes`,
-        },
-        {
-          label: "SHOTS",
-          ready: shots.length > 0,
-          value: `${shots.length} shots`,
-        },
-        {
-          label: "DIALOGUE",
-          ready: Boolean(dialoguePlan),
-          value: dialoguePlan
-            ? `${dialoguePlan.totalLines || 0} lines`
-            : "Waiting",
-        },
-        {
-          label: "VOICE",
-          ready:
-            Boolean(
-              production?.voices?.data?.lines?.length
-            ) ||
-            Boolean(
-              generatedVoiceUrl
-            ),
-          value:
-            generatedVoiceUrl ||
-            production?.voices?.data?.lines?.length
-              ? "Connected"
-              : "Waiting",
-        },
-        {
-          label: "SOUND",
-          ready: Boolean(generatedAudioUrl),
-          value: generatedAudioUrl
-            ? "Connected"
-            : "Waiting",
-        },
-      ].map((item) => (
-        <div
-          key={item.label}
-          style={{
-            padding: "9px",
-            borderRadius: "8px",
-            background: item.ready
-              ? "rgba(70,255,150,0.06)"
-              : "rgba(255,255,255,0.035)",
-            border: item.ready
-              ? "1px solid rgba(70,255,150,0.16)"
-              : "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "7px",
-              opacity: 0.5,
-              marginBottom: "3px",
-            }}
-          >
-            {item.label}
+            <h2 className="mt-2 text-2xl font-bold">
+              VIDEO PRODUCTION
+            </h2>
           </div>
 
-          <div
-            style={{
-              fontSize: "9px",
-              fontWeight: "800",
-            }}
+          <button
+            type="button"
+            onClick={
+              buildVideoPlan
+            }
+            disabled={
+              isBuildingVideoPlan ||
+              !story ||
+              !scenes.length
+            }
+            className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-40"
           >
-            {item.ready ? "🟢" : "⚪"}{" "}
-            {item.value}
-          </div>
-        </div>
-      ))}
-    </div>
+            {isBuildingVideoPlan
+              ? "BUILDING..."
+              : "BUILD VIDEO PLAN"}
+          </button>
 
-    <button
-      type="button"
-      onClick={buildVideoPlan}
-      disabled={
-        isBuildingVideoPlan ||
-        !story ||
-        !scenes.length
-      }
-      style={{
-        width: "100%",
-        padding: "12px",
-        borderRadius: "8px",
-        border:
-          "1px solid rgba(255,212,59,0.45)",
-        background:
-          "rgba(255,212,59,0.15)",
-        color: "inherit",
-        fontSize: "10px",
-        fontWeight: "800",
-        cursor:
-          isBuildingVideoPlan
-            ? "wait"
-            : "pointer",
-        opacity:
-          isBuildingVideoPlan ||
-          !story ||
-          !scenes.length
-            ? 0.5
-            : 1,
-      }}
-    >
-      {isBuildingVideoPlan
-        ? "⏳ BUILDING VIDEO PLAN..."
-        : "🎥 BUILD VIDEO PLAN"}
-    </button>
-
-    <div
-      style={{
-        marginTop: "10px",
-        padding: "9px",
-        borderRadius: "8px",
-        background:
-          "rgba(0,0,0,0.20)",
-        fontSize: "9px",
-        lineHeight: 1.5,
-        textAlign: "center",
-      }}
-    >
-      {videoPlanStatus}
-    </div>
-
-    {videoPlan && (
-      <div
-        style={{
-          marginTop: "10px",
-          display: "grid",
-          gap: "8px",
-        }}
-      >
-        <div
-          style={{
-            padding: "10px",
-            borderRadius: "9px",
-            background:
-              "rgba(70,255,150,0.06)",
-            border:
-              "1px solid rgba(70,255,150,0.18)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "10px",
-              fontWeight: "800",
-              marginBottom: "5px",
-            }}
-          >
-            🟢 VIDEO PLAN CONNECTED
+          <div className="mt-4 text-sm text-white/50">
+            {videoPlanStatus}
           </div>
 
-          <div
-            style={{
-              fontSize: "8px",
-              opacity: 0.6,
-              lineHeight: 1.5,
-            }}
-          >
-            {videoPlan.totalScenes} scenes •{" "}
-            {videoPlan.totalShots} shots
-            <br />
-            Voice:{" "}
-            {videoPlan.voiceConnected
-              ? "Connected"
-              : "Waiting"}
-            {" • "}
-            Sound:{" "}
-            {videoPlan.soundConnected
-              ? "Connected"
-              : "Waiting"}
-          </div>
-        </div>
-
-        {videoPlan.scenes.map(
-          (videoScene) => (
-            <div
-              key={
-                videoScene.sceneNumber
-              }
-              style={{
-                padding: "11px",
-                borderRadius: "9px",
-                background:
-                  "rgba(255,255,255,0.035)",
-                border:
-                  "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent:
-                    "space-between",
-                  gap: "8px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: "7px",
-                      opacity: 0.5,
-                    }}
-                  >
-                    SCENE{" "}
-                    {videoScene.sceneNumber}
+          {videoPlan && (
+            <div className="mt-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs text-white/40">
+                    SCENES
                   </div>
 
-                  <div
-                    style={{
-                      marginTop: "3px",
-                      fontSize: "11px",
-                      fontWeight: "800",
-                    }}
-                  >
-                    {videoScene.title}
+                  <div className="mt-2 text-2xl font-bold">
+                    {
+                      videoPlan.totalScenes
+                    }
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    fontSize: "7px",
-                    padding: "4px 6px",
-                    borderRadius: "6px",
-                    background:
-                      "rgba(70,255,150,0.08)",
-                    border:
-                      "1px solid rgba(70,255,150,0.16)",
-                    whiteSpace:
-                      "nowrap",
-                  }}
-                >
-                  READY
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs text-white/40">
+                    SHOTS
+                  </div>
+
+                  <div className="mt-2 text-2xl font-bold">
+                    {
+                      videoPlan.totalShots
+                    }
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs text-white/40">
+                    CONNECTIONS
+                  </div>
+
+                  <div className="mt-2 text-xs text-white/60">
+                    Voice:{" "}
+                    {videoPlan.voiceConnected
+                      ? "Connected"
+                      : "Waiting"}
+                    <br />
+                    Sound:{" "}
+                    {videoPlan.soundConnected
+                      ? "Connected"
+                      : "Waiting"}
+                  </div>
                 </div>
               </div>
 
-              <div
-                style={{
-                  marginTop: "8px",
-                  display: "grid",
-                  gap: "6px",
-                }}
-              >
-                {videoScene.shots.map(
-                  (shot) => (
+              <div className="mt-6 space-y-4">
+                {safeArray(
+                  videoPlan.scenes
+                ).map(
+                  (videoScene) => (
                     <div
-                      key={shot.id}
-                      style={{
-                        padding: "8px",
-                        borderRadius: "7px",
-                        background:
-                          "rgba(0,0,0,0.20)",
-                      }}
+                      key={
+                        videoScene.sceneNumber
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
                     >
-                      <div
-                        style={{
-                          fontSize: "8px",
-                          fontWeight: "800",
-                        }}
-                      >
-                        SHOT{" "}
-                        {shot.shotNumber}
-                        {" • "}
-                        {shot.shotType}
+                      <div className="font-bold">
+                        Scene{" "}
+                        {
+                          videoScene.sceneNumber
+                        }{" "}
+                        —{" "}
+                        {
+                          videoScene.title
+                        }
                       </div>
 
-                      <div
-                        style={{
-                          marginTop: "4px",
-                          fontSize: "8px",
-                          opacity: 0.6,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {shot.description}
-                      </div>
+                      <div className="mt-3 space-y-2">
+                        {safeArray(
+                          videoScene.shots
+                        ).map(
+                          (shot) => (
+                            <div
+                              key={
+                                shot.id ||
+                                shot.shotNumber
+                              }
+                              className="rounded-xl border border-white/10 bg-black/20 p-3"
+                            >
+                              <div className="flex justify-between">
+                                <span className="text-xs font-bold text-yellow-400">
+                                  SHOT{" "}
+                                  {
+                                    shot.shotNumber
+                                  }
+                                </span>
 
-                      <div
-                        style={{
-                          marginTop: "5px",
-                          fontSize: "7px",
-                          opacity: 0.45,
-                        }}
-                      >
-                        🎥 {shot.camera}
-                      </div>
+                                <span className="text-xs text-white/30">
+                                  {
+                                    shot.shotType
+                                  }
+                                </span>
+                              </div>
 
-                      {shot.character && (
-                        <div
-                          style={{
-                            marginTop: "5px",
-                            fontSize: "7px",
-                            opacity: 0.55,
-                          }}
-                        >
-                          👤{" "}
-                          {shot.character}
-                        </div>
-                      )}
+                              <p className="mt-2 text-sm text-white/60">
+                                {
+                                  shot.description
+                                }
+                              </p>
 
-                      {shot.dialogue && (
-                        <div
-                          style={{
-                            marginTop: "5px",
-                            fontSize: "8px",
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          💬 “{shot.dialogue}”
-                        </div>
-                      )}
+                              <div className="mt-2 text-xs text-white/40">
+                                Camera:{" "}
+                                {
+                                  shot.camera
+                                }
+                              </div>
 
-                      <div
-                        style={{
-                          marginTop: "6px",
-                          fontSize: "7px",
-                          color:
-                            "rgba(70,255,150,0.75)",
-                          fontWeight: "800",
-                        }}
-                      >
-                        ● READY FOR VIDEO GENERATION
+                              {shot.character && (
+                                <div className="mt-1 text-xs text-white/40">
+                                  Character:{" "}
+                                  {
+                                    shot.character
+                                  }
+                                </div>
+                              )}
+
+                              {shot.dialogue && (
+                                <div className="mt-2 text-xs text-white/50">
+                                  Dialogue:{" "}
+                                  {
+                                    shot.dialogue
+                                  }
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )}
                       </div>
                     </div>
                   )
                 )}
               </div>
             </div>
-          )
-        )}
-      </div>
-    )}
-  </div>
-)}
-      {/* =====================================================
-          SOUND STUDIO
-      ===================================================== */}
+          )}
+        </div>
+      )}
+
+      {/* ===================================================
+          SOUND
+      =================================================== */}
 
       {activeModule === "SOUND" && (
-        <div
-          style={{
-            marginTop: "14px",
-            padding: "14px",
-            borderRadius: "12px",
-            border:
-              "1px solid rgba(255,212,59,0.20)",
-            background:
-              "rgba(255,212,59,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  letterSpacing: "1px",
-                  opacity: 0.55,
-                }}
-              >
-                SOUND STUDIO
-              </div>
-
-              <h3
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                }}
-              >
-                🔊 AI Sound
-              </h3>
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <div className="mb-6">
+            <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+              MODULE 08
             </div>
+
+            <h2 className="mt-2 text-2xl font-bold">
+              SOUND STUDIO
+            </h2>
+          </div>
+
+          <textarea
+            value={soundPrompt}
+            onChange={(event) =>
+              setSoundPrompt(
+                event.target.value
+              )
+            }
+            rows={5}
+            className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-sm outline-none placeholder:text-white/30 focus:border-yellow-400/50"
+          />
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold">
+              Duration
+            </label>
+
+            <select
+              value={soundDuration}
+              onChange={(event) =>
+                setSoundDuration(
+                  Number(
+                    event.target.value
+                  )
+                )
+              }
+              className="rounded-xl border border-white/10 bg-black px-4 py-3 text-sm"
+            >
+              <option value={5}>
+                5 seconds
+              </option>
+
+              <option value={10}>
+                10 seconds
+              </option>
+
+              <option value={15}>
+                15 seconds
+              </option>
+
+              <option value={30}>
+                30 seconds
+              </option>
+            </select>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={
+                generateAISound
+              }
+              disabled={
+                isGeneratingSound
+              }
+              className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-bold text-black disabled:opacity-40"
+            >
+              {isGeneratingSound
+                ? "GENERATING..."
+                : "GENERATE AI SOUND"}
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                playGeneratedSound
+              }
+              disabled={
+                !generatedAudioUrl
+              }
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm disabled:opacity-30"
+            >
+              ▶ PLAY
+            </button>
 
             <button
               type="button"
               onClick={() => {
                 stopGeneratedSound();
-                setActiveModule(null);
+                setActiveModule(
+                  null
+                );
               }}
-              style={{
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(255,255,255,0.05)",
-                color: "inherit",
-                borderRadius: "8px",
-                padding: "6px 9px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
+              className="rounded-xl border border-white/10 px-5 py-3 text-sm text-white/60"
             >
               CLOSE
             </button>
           </div>
 
-          <div
-            style={{
-              padding: "12px",
-              borderRadius: "10px",
-              border:
-                "1px solid rgba(255,212,59,0.30)",
-              background:
-                "rgba(255,212,59,0.07)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: "800",
-                letterSpacing: "1px",
-                marginBottom: "5px",
-              }}
-            >
-              ✨ BOMBA AI SOUND GENERATOR
-            </div>
-
-            <div
-              style={{
-                fontSize: "9px",
-                opacity: 0.55,
-                lineHeight: 1.5,
-                marginBottom: "10px",
-              }}
-            >
-              Create original AI background music
-              from your own description.
-            </div>
-
-            <textarea
-              value={soundPrompt}
-              onChange={(event) =>
-                setSoundPrompt(
-                  event.target.value
-                )
+          {generatedAudioUrl && (
+            <audio
+              ref={
+                generatedAudioRef
               }
-              rows={4}
-              placeholder="Describe the music you want..."
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                padding: "10px",
-                borderRadius: "8px",
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                background:
-                  "rgba(0,0,0,0.25)",
-                color: "inherit",
-                fontSize: "11px",
-                lineHeight: 1.5,
-                outline: "none",
-              }}
+              controls
+              preload="metadata"
+              src={
+                generatedAudioUrl
+              }
+              className="mt-5 w-full"
             />
+          )}
 
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                marginTop: "9px",
-              }}
-            >
-              <select
-                value={soundDuration}
-                onChange={(event) =>
-                  setSoundDuration(
-                    Number(
-                      event.target.value
-                    )
-                  )
-                }
-                style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border:
-                    "1px solid rgba(255,255,255,0.12)",
-                  background:
-                    "rgba(0,0,0,0.35)",
-                  color: "inherit",
-                  fontSize: "10px",
-                }}
-              >
-                <option value={5}>
-                  5 seconds
-                </option>
-                <option value={8}>
-                  8 seconds
-                </option>
-                <option value={10}>
-                  10 seconds
-                </option>
-                <option value={15}>
-                  15 seconds
-                </option>
-                <option value={20}>
-                  20 seconds
-                </option>
-                <option value={30}>
-                  30 seconds
-                </option>
-              </select>
+          <div className="mt-4 text-sm text-white/50">
+            {
+              generatedSoundStatus
+            }
+          </div>
 
-              <button
-                type="button"
-                onClick={
-                  generateAISound
-                }
-                disabled={
-                  isGeneratingSound
-                }
-                style={{
-                  flex: 2,
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border:
-                    "1px solid rgba(255,212,59,0.45)",
-                  background:
-                    "rgba(255,212,59,0.15)",
-                  color: "inherit",
-                  fontSize: "10px",
-                  fontWeight: "800",
-                  cursor:
-                    isGeneratingSound
-                      ? "wait"
-                      : "pointer",
-                  opacity:
-                    isGeneratingSound
-                      ? 0.65
-                      : 1,
-                }}
-              >
-                {isGeneratingSound
-                  ? "⏳ CREATING SOUND..."
-                  : "🎵 GENERATE AI SOUND"}
-              </button>
+          {generatedSoundError && (
+            <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+              {
+                generatedSoundError
+              }
             </div>
+          )}
+        </div>
+      )}
 
-            <div
-              style={{
-                marginTop: "10px",
-                padding: "9px",
-                borderRadius: "8px",
-                background:
-                  "rgba(0,0,0,0.20)",
-                fontSize: "9px",
-                lineHeight: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {generatedSoundStatus}
+      {/* ===================================================
+          TIMELINE
+      =================================================== */}
+
+      {activeModule ===
+        "TIMELINE" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-6">
+          <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+            MODULE 09
+          </div>
+
+          <h2 className="mt-2 text-2xl font-bold">
+            TIMELINE
+          </h2>
+
+          <p className="mt-3 text-sm leading-6 text-white/50">
+            Timeline will connect VIDEO,
+            VOICES and SOUND.
+          </p>
+
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/50">
+            Production Brain dependency:
+            VIDEO + VOICES + SOUND →
+            TIMELINE
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================
+          PREVIEW
+      =================================================== */}
+
+      {activeModule ===
+        "PREVIEW" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-6">
+          <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+            MODULE 10
+          </div>
+
+          <h2 className="mt-2 text-2xl font-bold">
+            PREVIEW
+          </h2>
+
+          <div className="mt-5 aspect-video rounded-2xl border border-white/10 bg-black flex items-center justify-center">
+            <div className="text-sm text-white/30">
+              Preview will appear here
+              after TIMELINE generation.
             </div>
+          </div>
+        </div>
+      )}
 
-            {generatedSoundError && (
-              <div
-                style={{
-                  marginTop: "7px",
-                  padding: "8px",
-                  borderRadius: "7px",
-                  background:
-                    "rgba(255,70,70,0.08)",
-                  border:
-                    "1px solid rgba(255,70,70,0.20)",
-                  fontSize: "8px",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
-                }}
-              >
-                {generatedSoundError}
-              </div>
-            )}
+      {/* ===================================================
+          EXPORT
+      =================================================== */}
 
-            {generatedAudioUrl && (
-              <div
-                style={{
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background:
-                    "rgba(0,0,0,0.25)",
-                  border:
-                    "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "9px",
-                    fontWeight: "800",
-                    marginBottom: "7px",
-                  }}
-                >
-                  ✅ AI SOUND READY
-                </div>
+      {activeModule ===
+        "EXPORT" && (
+        <div className="mt-8 rounded-3xl border border-white/10 bg-black/40 p-6">
+          <div className="text-xs font-semibold tracking-[0.25em] text-yellow-400">
+            MODULE 11
+          </div>
 
-                <audio
-                  controls
-                  preload="metadata"
-                  src={generatedAudioUrl}
-                  style={{
-                    width: "100%",
-                    height: "40px",
-                  }}
-                />
+          <h2 className="mt-2 text-2xl font-bold">
+            EXPORT
+          </h2>
 
-                <button
-                  type="button"
-                  onClick={
-                    playGeneratedSound
-                  }
-                  style={{
-                    width: "100%",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border:
-                      "1px solid rgba(255,212,59,0.35)",
-                    background:
-                      "rgba(255,212,59,0.08)",
-                    color: "inherit",
-                    fontSize: "10px",
-                    fontWeight: "800",
-                    cursor: "pointer",
-                  }}
-                >
-                  ▶️ PLAY AI SOUND
-                </button>
-              </div>
-            )}
+          <p className="mt-3 text-sm leading-6 text-white/50">
+            Export becomes available after
+            PREVIEW and TIMELINE are
+            completed.
+          </p>
+
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/50">
+            Production Brain dependency:
+            PREVIEW + TIMELINE →
+            EXPORT
           </div>
         </div>
       )}
