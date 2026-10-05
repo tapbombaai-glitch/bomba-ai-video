@@ -1,16 +1,18 @@
- /** @type {import('next').NextConfig} */
+/** @type {import('next').NextConfig} */
 
 const nextConfig = {
   serverExternalPackages: [
     "fluent-ffmpeg",
-    "ffmpeg-static"
+    "ffmpeg-static",
   ],
 
-  outputFileTracingIncludes: {
-    "/api/video/finalize": [
-      "./node_modules/ffmpeg-static/ffmpeg"
-    ]
-  }
+  experimental: {
+    outputFileTracingIncludes: {
+      "/api/video/finalize": [
+        "./node_modules/ffmpeg-static/**/*",
+      ],
+    },
+  },
 };
 
 export default nextConfig;
