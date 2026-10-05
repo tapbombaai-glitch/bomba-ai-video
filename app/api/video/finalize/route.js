@@ -68,6 +68,7 @@ function runFfmpeg({
   videoPath,
   audioPaths,
   audioStartTimes,
+  soundPath,
   outputPath,
 }) {
   return new Promise((resolve, reject) => {
