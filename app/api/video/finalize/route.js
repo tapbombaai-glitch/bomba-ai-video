@@ -112,24 +112,36 @@ function runFfmpeg({
       .join("");
 
     filterParts.push(
-      `${mixInputs}amix=inputs=${inputCount}:duration=longest:dropout_transition=0[mixedVoice]`
-    );
+  `${mixInputs}amix=inputs=${inputCount}:duration=longest:dropout_transition=0[mixedVoice]`
+);
 
-    filterParts.push(
-      `[0:v]copy[vout]`
-    );
+if (soundPath) {
+  filterParts.push(
+    `[1:a]volume=0.22[backgroundSound]`
+  );
 
-    command
-      .complexFilter(filterParts)
-      .outputOptions([
-        "-map [vout]",
-        "-map [mixedVoice]",
-        "-c:v copy",
-        "-c:a aac",
-        "-b:a 192k",
-        "-shortest",
-        "-movflags +faststart",
-      ])
+  filterParts.push(
+    `[mixedVoice][backgroundSound]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[mixedAudio]`
+  );
+} else {
+  filterParts.push(
+    `[mixedVoice]anull[mixedAudio]`
+  );
+}
+
+filterParts.push(`[0:v]copy[vout]`);
+
+command
+  .complexFilter(filterParts)
+  .outputOptions([
+    "-map [vout]",
+    "-map [mixedAudio]",
+    "-c:v copy",
+    "-c:a aac",
+    "-b:a 192k",
+    "-shortest",
+    "-movflags +faststart",
+  ])
       .on("start", (commandLine) => {
         console.log(
           "BOMBA FFMPEG START:",
