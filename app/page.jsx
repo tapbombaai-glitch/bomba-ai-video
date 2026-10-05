@@ -1973,7 +1973,7 @@ export default function Home() {
       );
 
     const characters =
-  await createMasterCharacters(story);
+  createMasterCharacters();
 
       production =
         markStage(
