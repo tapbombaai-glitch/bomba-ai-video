@@ -422,6 +422,29 @@ export async function POST(request) {
       );
     }
 
+let soundPath = "";
+
+const soundUrl =
+  typeof body?.sound?.audioUrl === "string"
+    ? body.sound.audioUrl.trim()
+    : "";
+
+if (soundUrl) {
+  soundPath = path.join(
+    workDir,
+    "background-sound.mp3"
+  );
+
+  console.log(
+    "BOMBA DOWNLOADING BACKGROUND SOUND:",
+    soundUrl
+  );
+
+  await downloadFile(
+    soundUrl,
+    soundPath
+  );
+}
     /*
       STEP 4
       Mix all character voices with
