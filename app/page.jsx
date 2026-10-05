@@ -1620,14 +1620,18 @@ export default function Home() {
           }
 
           const generatedVideoUrl =
-            URL.createObjectURL(
-              videoBlob
-            );
+  URL.createObjectURL(
+    videoBlob
+  );
 
-          const finalVideoUrl =
-            await finalizeVideoWithVoice(
-              generatedVideoUrl
-            );
+const finalVideoUrl =
+  await finalizeVideoWithVoice(
+    generatedVideoUrl
+  );
+
+URL.revokeObjectURL(
+  generatedVideoUrl
+);
 
           completeFinalStages(
             finalVideoUrl,
