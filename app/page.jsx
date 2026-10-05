@@ -1239,9 +1239,15 @@ export default function Home() {
   ===================================================== */
 
   const finalizeVideoWithVoice = async (
-    generatedVideoUrl
-  ) => {
-    if (!generatedVideoUrl) {
+  generatedVideoUrl
+) => {
+  const production =
+    getProduction();
+
+  const soundData =
+    production?.sound?.data || null;
+
+  if (!generatedVideoUrl) {
       return generatedVideoUrl;
     }
 
