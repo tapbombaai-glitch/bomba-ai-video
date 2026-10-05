@@ -1233,8 +1233,8 @@ export default function Home() {
     };
   };
 
-  /* =====================================================
-     FINALIZE VIDEO WITH BOMBA VOICE
+    /* =====================================================
+     FINALIZE VIDEO WITH BOMBA VOICES
   ===================================================== */
 
   const finalizeVideoWithVoice = async (
@@ -1244,30 +1244,138 @@ export default function Home() {
       return generatedVideoUrl;
     }
 
-    let voicePublicId = "";
+    let voiceTracks = [];
 
     try {
-      voicePublicId =
+      const storedTracks =
         localStorage.getItem(
-          "bomba_voice_public_id"
-        ) || "";
+          "bomba_voice_tracks"
+        );
+
+      if (storedTracks) {
+        const parsedTracks =
+          JSON.parse(storedTracks);
+
+        if (
+          Array.isArray(
+            parsedTracks
+          )
+        ) {
+          voiceTracks =
+            parsedTracks.filter(
+              (track) =>
+                track?.publicId
+            );
+        }
+      }
     } catch (storageError) {
       console.error(
-        "BOMBA VOICE STORAGE ERROR:",
+        "BOMBA VOICE TRACK STORAGE ERROR:",
         storageError
       );
     }
 
-    if (!voicePublicId) {
+    // -----------------------------------------
+    // Backward compatibility with old
+    // single-voice storage
+    // -----------------------------------------
+
+    if (!voiceTracks.length) {
+      let legacyVoicePublicId = "";
+
+      try {
+        legacyVoicePublicId =
+          localStorage.getItem(
+            "bomba_voice_public_id"
+          ) || "";
+      } catch (storageError) {
+        console.error(
+          "BOMBA LEGACY VOICE STORAGE ERROR:",
+          storageError
+        );
+      }
+
+      if (legacyVoicePublicId) {
+        voiceTracks = [
+          {
+            publicId:
+              legacyVoicePublicId,
+            startTime: 0,
+          },
+        ];
+      }
+    }
+
+    if (!voiceTracks.length) {
       console.log(
-        "BOMBA: No Cloudinary voice found. Keeping original video."
+        "BOMBA: No Cloudinary voice tracks found. Keeping original video."
       );
 
       return generatedVideoUrl;
     }
 
+    // -----------------------------------------
+    // Clean tracks before sending them
+    // -----------------------------------------
+
+    voiceTracks =
+      voiceTracks.map(
+        (track) => ({
+          publicId:
+            String(
+              track?.publicId ||
+              track?.cloudinaryPublicId ||
+              ""
+            ).trim(),
+
+          startTime:
+            Number.isFinite(
+              Number(
+                track?.startTime
+              )
+            )
+              ? Number(
+                  track.startTime
+                )
+              : 0,
+        })
+      ).filter(
+        (track) =>
+          track.publicId
+      );
+
+    if (!voiceTracks.length) {
+      console.log(
+        "BOMBA: Voice tracks were empty after cleanup. Keeping original video."
+      );
+
+      return generatedVideoUrl;
+    }
+
+    console.log(
+      "======================================"
+    );
+
+    console.log(
+      "BOMBA FINALIZER VOICE HANDOFF"
+    );
+
+    console.log(
+      "VOICE TRACK COUNT:",
+      voiceTracks.length
+    );
+
+    console.log(
+      "VOICE TRACKS:",
+      voiceTracks
+    );
+
+    console.log(
+      "======================================"
+    );
+
     setStatus(
-      "Video ready. Adding your BOMBA AI voice... 🎙️"
+      `Video ready. Adding ${voiceTracks.length} BOMBA AI voice tracks... 🎙️`
     );
 
     const finalizeResponse =
@@ -1275,16 +1383,20 @@ export default function Home() {
         "/api/video/finalize",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
+
             Accept:
               "application/json",
           },
+
           body: JSON.stringify({
             videoUrl:
               generatedVideoUrl,
-            voicePublicId,
+
+            voiceTracks,
           }),
         }
       );
@@ -1303,10 +1415,15 @@ export default function Home() {
       throw new Error(
         getSafeErrorMessage(
           finalizeData,
-          "Unable to attach the BOMBA AI voice to the video."
+          "Unable to attach the BOMBA AI voices to the video."
         )
       );
     }
+
+    console.log(
+      "BOMBA FINAL VIDEO WITH VOICES READY:",
+      finalizeData.videoUrl
+    );
 
     return finalizeData.videoUrl;
   };
