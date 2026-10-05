@@ -1972,8 +1972,8 @@ export default function Home() {
         "03/12 — Creating characters... 👤"
       );
 
-      const characters =
-        createMasterCharacters();
+    const characters =
+  await createMasterCharacters(story);
 
       production =
         markStage(
