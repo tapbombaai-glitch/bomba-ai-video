@@ -649,105 +649,242 @@ export default function Home() {
     dialogue
   ) => {
     const lines =
-      dialogue?.lines || [];
+      Array.isArray(dialogue?.lines)
+        ? dialogue.lines
+        : [];
 
-    const voiceText =
-      lines
-        .map(
-          (line) =>
-            line.text
-        )
-        .filter(Boolean)
-        .join(" ");
-
-    if (!voiceText.trim()) {
+    if (!lines.length) {
       throw new Error(
         "No dialogue was available for the voice stage."
       );
     }
 
-    const voiceId =
-      "ada_pcm";
-
-    const language =
-      "pcm";
-
     setStatus(
-      "Generating BOMBA AI voice... 🎙️"
+      "Generating BOMBA AI voices... 🎙️"
     );
 
-    const response =
-      await fetch(
-        "/api/voice/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-            Accept:
-              "audio/mpeg, application/json",
-          },
-          body: JSON.stringify({
-            text: voiceText,
-            voiceId,
-            language,
-          }),
+    // -----------------------------------------
+    // Generate every dialogue line separately
+    // -----------------------------------------
+
+    const generatedAudio = [];
+
+    for (
+      let index = 0;
+      index < lines.length;
+      index++
+    ) {
+      const line = lines[index];
+
+      if (!line) continue;
+
+      const speaker =
+        line?.speaker ||
+        line?.characterName ||
+        line?.character ||
+        line?.name ||
+        "";
+
+      const text =
+        String(
+          line?.text ||
+          line?.dialogue ||
+          line?.line ||
+          ""
+        ).trim();
+
+      if (!text) continue;
+
+      // ---------------------------------------
+      // Use the voice assigned to the character
+      // ---------------------------------------
+
+      let voiceId =
+        line?.voice ||
+        "";
+
+      if (!voiceId) {
+        if (
+          line?.characterId ===
+          "character-friend"
+        ) {
+          voiceId =
+            "blessing_pcm";
+        } else {
+          voiceId =
+            "ada_pcm";
         }
-      );
+      }
 
-    if (!response.ok) {
-      let data = {};
+      const language =
+        "pcm";
 
-      try {
-        data =
-          await readJsonResponse(
-            response
-          );
-      } catch {}
+      // ---------------------------------------
+      // Convert timing such as "5-10"
+      // into startTime = 5
+      // ---------------------------------------
 
-      throw new Error(
-        getSafeErrorMessage(
-          data,
-          "BOMBA AI voice generation failed."
+      let startTime = 0;
+
+      if (
+        typeof line?.timing ===
+        "string"
+      ) {
+        const timingParts =
+          line.timing
+            .split("-")
+            .map((value) =>
+              Number(value.trim())
+            );
+
+        if (
+          Number.isFinite(
+            timingParts[0]
+          )
+        ) {
+          startTime =
+            timingParts[0];
+        }
+      } else if (
+        Number.isFinite(
+          Number(line?.startTime)
         )
-      );
-    }
+      ) {
+        startTime =
+          Number(line.startTime);
+      }
 
-    const audioBuffer =
-      await response.arrayBuffer();
-
-    if (!audioBuffer.byteLength) {
-      throw new Error(
-        "BOMBA AI returned an empty voice file."
-      );
-    }
-
-    const audioBlob =
-      new Blob(
-        [audioBuffer],
-        {
-          type: "audio/mpeg",
-        }
+      console.log(
+        "======================================"
       );
 
-    const localAudioUrl =
-      URL.createObjectURL(
-        audioBlob
+      console.log(
+        `BOMBA VOICE LINE ${index + 1}`
       );
 
-    let cloudinaryData = null;
+      console.log(
+        "Speaker:",
+        speaker
+      );
 
-    const cloudName =
-      process.env
-        .NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-      "";
+      console.log(
+        "Voice:",
+        voiceId
+      );
 
-    const uploadPreset =
-      process.env
-        .NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
-      "bomba_voice";
+      console.log(
+        "Start Time:",
+        startTime
+      );
 
-    if (cloudName) {
+      console.log(
+        "Text:",
+        text
+      );
+
+      // ---------------------------------------
+      // Generate this dialogue line
+      // ---------------------------------------
+
+      const response =
+        await fetch(
+          "/api/voice/generate",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Accept:
+                "audio/mpeg, application/json",
+            },
+
+            body: JSON.stringify({
+              text,
+              voiceId,
+              language,
+              character:
+                speaker,
+            }),
+          }
+        );
+
+      if (!response.ok) {
+        let data = {};
+
+        try {
+          data =
+            await readJsonResponse(
+              response
+            );
+        } catch {}
+
+        throw new Error(
+          getSafeErrorMessage(
+            data,
+            `Voice generation failed for ${
+              speaker ||
+              "unknown character"
+            }.`
+          )
+        );
+      }
+
+      // ---------------------------------------
+      // Read generated audio
+      // ---------------------------------------
+
+      const audioBuffer =
+        await response.arrayBuffer();
+
+      if (
+        !audioBuffer.byteLength
+      ) {
+        throw new Error(
+          `BOMBA AI returned an empty voice file for ${
+            speaker ||
+            "unknown character"
+          }.`
+        );
+      }
+
+      const audioBlob =
+        new Blob(
+          [audioBuffer],
+          {
+            type: "audio/mpeg",
+          }
+        );
+
+      const localAudioUrl =
+        URL.createObjectURL(
+          audioBlob
+        );
+
+      // ---------------------------------------
+      // Upload this voice line to Cloudinary
+      // ---------------------------------------
+
+      let cloudinaryData =
+        null;
+
+      const cloudName =
+        process.env
+          .NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+        "";
+
+      const uploadPreset =
+        process.env
+          .NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
+        "bomba_voice";
+
+      if (!cloudName) {
+        throw new Error(
+          "Cloudinary Cloud Name is not configured."
+        );
+      }
+
       try {
         const formData =
           new FormData();
@@ -755,7 +892,7 @@ export default function Home() {
         formData.append(
           "file",
           audioBlob,
-          "bomba-master-voice.mp3"
+          `bomba-voice-${index + 1}.mp3`
         );
 
         formData.append(
@@ -772,64 +909,259 @@ export default function Home() {
             }
           );
 
+        const cloudinaryText =
+          await cloudinaryResponse.text();
+
         if (
-          cloudinaryResponse.ok
+          !cloudinaryResponse.ok
         ) {
-          cloudinaryData =
-            await cloudinaryResponse.json();
-
-          if (
-            cloudinaryData?.public_id
-          ) {
-            localStorage.setItem(
-              "bomba_voice_public_id",
-              cloudinaryData.public_id
-            );
-
-            localStorage.setItem(
-              "bomba_voice_cloudinary_resource_type",
-              cloudinaryData.resource_type ||
-                "video"
-            );
-
-            localStorage.setItem(
-              "bomba_voice_language",
-              language
-            );
-
-            localStorage.setItem(
-              "bomba_voice_text",
-              voiceText
-            );
-
-            localStorage.setItem(
-              "bomba_voice_id",
-              voiceId
-            );
-          }
-        } else {
-          console.warn(
-            "BOMBA Cloudinary voice upload failed."
+          throw new Error(
+            cloudinaryText ||
+              `Cloudinary upload failed with HTTP ${cloudinaryResponse.status}.`
           );
         }
-      } catch (cloudinaryError) {
-        console.warn(
-          "BOMBA Cloudinary upload error:",
-          cloudinaryError
+
+        try {
+          cloudinaryData =
+            cloudinaryText
+              ? JSON.parse(
+                  cloudinaryText
+                )
+              : {};
+        } catch {
+          cloudinaryData = {};
+        }
+      } catch (
+        cloudinaryError
+      ) {
+        throw new Error(
+          `Cloudinary voice upload failed for ${
+            speaker ||
+            "unknown character"
+          }: ${
+            cloudinaryError?.message ||
+            "Unknown Cloudinary error."
+          }`
         );
       }
+
+      if (
+        !cloudinaryData?.public_id
+      ) {
+        throw new Error(
+          `Cloudinary did not return a public ID for ${
+            speaker ||
+            "unknown character"
+          }.`
+        );
+      }
+
+      // ---------------------------------------
+      // Store complete voice track
+      // ---------------------------------------
+
+      generatedAudio.push({
+        index,
+
+        speaker,
+
+        text,
+
+        voiceId,
+
+        language,
+
+        audioUrl:
+          cloudinaryData?.secure_url ||
+          cloudinaryData?.url ||
+          localAudioUrl,
+
+        cloudinaryPublicId:
+          cloudinaryData.public_id,
+
+        resourceType:
+          cloudinaryData.resource_type ||
+          "video",
+
+        startTime,
+
+        timing:
+          line?.timing ||
+          `${startTime}`,
+
+        status:
+          "completed",
+
+        blob:
+          audioBlob,
+      });
+
+      console.log(
+        "BOMBA VOICE TRACK READY:",
+        {
+          index,
+          speaker,
+          voiceId,
+          startTime,
+          publicId:
+            cloudinaryData.public_id,
+        }
+      );
     }
 
+    // -----------------------------------------
+    // Make sure we actually generated tracks
+    // -----------------------------------------
+
+    if (!generatedAudio.length) {
+      throw new Error(
+        "BOMBA AI did not generate any dialogue voice tracks."
+      );
+    }
+
+    // -----------------------------------------
+    // Build final voice track list
+    // -----------------------------------------
+
+    const voiceTracks =
+      generatedAudio.map(
+        (item) => ({
+          speaker:
+            item.speaker,
+
+          text:
+            item.text,
+
+          voiceId:
+            item.voiceId,
+
+          language:
+            item.language,
+
+          publicId:
+            item.cloudinaryPublicId,
+
+          cloudinaryPublicId:
+            item.cloudinaryPublicId,
+
+          resourceType:
+            item.resourceType,
+
+          audioUrl:
+            item.audioUrl,
+
+          startTime:
+            item.startTime,
+
+          status:
+            item.status,
+        })
+      );
+
+    // -----------------------------------------
+    // Save all voice tracks for finalizer
+    // -----------------------------------------
+
+    try {
+      localStorage.setItem(
+        "bomba_voice_tracks",
+        JSON.stringify(
+          voiceTracks
+        )
+      );
+
+      // Keep the old single-voice key
+      // for backward compatibility.
+      localStorage.setItem(
+        "bomba_voice_public_id",
+        voiceTracks[0]
+          ?.publicId || ""
+      );
+
+      localStorage.setItem(
+        "bomba_voice_cloudinary_resource_type",
+        voiceTracks[0]
+          ?.resourceType ||
+          "video"
+      );
+
+      localStorage.setItem(
+        "bomba_voice_language",
+        language
+      );
+    } catch (
+      storageError
+    ) {
+      console.warn(
+        "BOMBA: Could not save voice tracks to localStorage.",
+        storageError
+      );
+    }
+
+    console.log(
+      "======================================"
+    );
+
+    console.log(
+      "BOMBA MASTER VOICE TRACKS READY"
+    );
+
+    console.log(
+      "VOICE TRACK COUNT:",
+      voiceTracks.length
+    );
+
+    console.log(
+      "VOICE TRACKS:",
+      voiceTracks
+    );
+
+    console.log(
+      "======================================"
+    );
+
+    // -----------------------------------------
+    // Return complete voice production
+    // -----------------------------------------
+
     return {
-      mode: "master",
+      mode:
+        "master",
+
       language,
-      voiceId,
-      voiceName: "Ada",
-      text: voiceText,
-      audioUrl: localAudioUrl,
-      cloudinary:
-        cloudinaryData,
-      status: "completed",
+
+      status:
+        "completed",
+
+      characterVoices:
+        lines.reduce(
+          (map, line) => {
+            if (
+              line?.characterName
+            ) {
+              map[
+                line.characterName
+              ] =
+                line?.voice ||
+                "ada_pcm";
+            }
+
+            return map;
+          },
+          {}
+        ),
+
+      dialogue:
+        generatedAudio,
+
+      voiceTracks,
+
+      voices:
+        voiceTracks,
+
+      totalTracks:
+        voiceTracks.length,
+
       createdAt:
         new Date().toISOString(),
     };
