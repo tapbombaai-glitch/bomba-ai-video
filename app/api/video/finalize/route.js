@@ -129,12 +129,10 @@ if (soundPath) {
   );
 }
 
-filterParts.push(`[0:v]copy[vout]`);
-
 command
   .complexFilter(filterParts)
   .outputOptions([
-    "-map [vout]",
+    "-map 0:v:0",
     "-map [mixedAudio]",
     "-c:v copy",
     "-c:a aac",
