@@ -102,8 +102,7 @@ function runFfmpeg({
         )
       );
 
-      filterParts.push(
-        `[${index + 1}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
+      `[${index + 2}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
       );
     });
 
