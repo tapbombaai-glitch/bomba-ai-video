@@ -430,6 +430,15 @@ const soundUrl =
     : "";
 
 if (soundUrl) {
+  if (
+    !soundUrl.startsWith("https://") &&
+    !soundUrl.startsWith("http://")
+  ) {
+    throw new Error(
+      "The supplied background sound URL must be a valid HTTP or HTTPS URL."
+    );
+  }
+
   soundPath = path.join(
     workDir,
     "background-sound.mp3"
@@ -442,6 +451,11 @@ if (soundUrl) {
 
   await downloadFile(
     soundUrl,
+    soundPath
+  );
+
+  console.log(
+    "BOMBA BACKGROUND SOUND DOWNLOADED:",
     soundPath
   );
 }
