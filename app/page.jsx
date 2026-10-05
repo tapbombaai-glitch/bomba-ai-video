@@ -1601,10 +1601,9 @@ export default function Home() {
 
       try {
         voiceData =
-         await generateMasterVoice(
-  dialogue.lines,
-  characters
-);
+  await generateMasterVoice(
+    dialogue
+  );
         production =
           markStage(
             "voices",
