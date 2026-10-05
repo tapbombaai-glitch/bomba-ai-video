@@ -388,25 +388,30 @@ for (let index = 0; index < dialogue.length; index++) {
     URL.createObjectURL(audioBlob);
 
   // ---------------------------------------
-  // Store complete generated voice record
-  // ---------------------------------------
+// Store complete generated voice record
+// ---------------------------------------
 
-  generatedAudio.push({
-    index,
-    speaker,
-    text,
-    voiceId,
-    language,
-    audioUrl,
-    cloudinaryPublicId:
-      cloudinary.public_id,
-    resourceType:
-      cloudinary.resource_type ||
-      "video",
-    status: "completed",
-    blob: audioBlob,
-  });
-}
+generatedAudio.push({
+  index,
+  speaker,
+  text,
+  voiceId,
+  language,
+  audioUrl,
+  cloudinaryPublicId:
+    cloudinary.public_id,
+  resourceType:
+    cloudinary.resource_type ||
+    "video",
+  startTime:
+    Number.isFinite(
+      Number(line?.startTime)
+    )
+      ? Number(line.startTime)
+      : 0,
+  status: "completed",
+  blob: audioBlob,
+});
 
 // -----------------------------------------
 // Return complete character voice production
