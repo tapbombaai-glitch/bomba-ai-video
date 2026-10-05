@@ -103,8 +103,8 @@ function runFfmpeg({
       );
 
       filterParts.push(
-    `[${index + 2}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
-      );
+  `[${index + (soundPath ? 2 : 1)}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
+);
     });
 
     const mixInputs = audioPaths
