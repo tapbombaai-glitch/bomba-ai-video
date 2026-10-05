@@ -8,6 +8,7 @@ import StudioBoard from "./components/StudioBoard/StudioBoard";
 import {
   initializeProduction,
   changeStage,
+  getProduction,
 } from "../lib/bomba/productionStore";
 
 export default function Home() {
