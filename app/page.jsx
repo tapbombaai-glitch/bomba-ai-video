@@ -1400,11 +1400,31 @@ export default function Home() {
           },
 
           body: JSON.stringify({
-            videoUrl:
-              generatedVideoUrl,
+  videoUrl:
+    generatedVideoUrl,
 
-            voiceTracks,
-          }),
+  voiceTracks,
+
+  sound: soundData
+    ? {
+        audioUrl:
+          soundData?.audioUrl ||
+          soundData?.audio_url ||
+          null,
+
+        duration:
+          Number.isFinite(
+            Number(
+              soundData?.duration
+            )
+          )
+            ? Number(
+                soundData.duration
+              )
+            : null,
+      }
+    : null,
+}),
         }
       );
 
