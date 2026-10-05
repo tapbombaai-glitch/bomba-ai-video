@@ -73,7 +73,9 @@ function runFfmpeg({
 }) {
   return new Promise((resolve, reject) => {
     const command = ffmpeg(videoPath);
-
+    if (soundPath) {
+  command.input(soundPath);
+}
     audioPaths.forEach((audioPath) => {
       command.input(audioPath);
     });
