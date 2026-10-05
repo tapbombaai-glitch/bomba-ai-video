@@ -22,9 +22,27 @@ const CLOUDINARY_UPLOAD_URL =
       )}/video/upload`
     : "";
 
-if (ffmpegPath) {
-  ffmpeg.setFfmpegPath(ffmpegPath);
+const resolvedFfmpegPath = ffmpegPath
+  ? path.resolve(ffmpegPath)
+  : null;
+
+if (
+  !resolvedFfmpegPath ||
+  !(await import("fs")).existsSync(resolvedFfmpegPath)
+) {
+  throw new Error(
+    `BOMBA FFmpeg binary not found at: ${
+      resolvedFfmpegPath || "unknown path"
+    }`
+  );
 }
+
+ffmpeg.setFfmpegPath(resolvedFfmpegPath);
+
+console.log(
+  "BOMBA FFMPEG BINARY:",
+  resolvedFfmpegPath
+);
 
 function safeParse(text) {
   try {
