@@ -1242,10 +1242,12 @@ export default function Home() {
   generatedVideoUrl
 ) => {
   const production =
-    getProduction();
+  getProduction();
 
-  const soundData =
-    production?.sound?.data || null;
+const soundData =
+  production?.sound?.data ||
+  production?.sound ||
+  null;
 
   if (!generatedVideoUrl) {
       return generatedVideoUrl;
