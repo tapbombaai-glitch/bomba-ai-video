@@ -2082,9 +2082,10 @@ const runMasterProduction = async () => {
 
   try {
     voiceData =
-      await generateMasterVoice(
-        dialogue
-      );
+  await generateMasterVoice(
+    dialogue,
+    characters
+  );
 
     production =
       markStage(
