@@ -458,11 +458,12 @@ if (soundUrl) {
       );
 
     await runFfmpeg({
-      videoPath: videoInputPath,
-      audioPaths,
-      audioStartTimes,
-      outputPath: mixedVideoPath,
-    });
+  videoPath: videoInputPath,
+  audioPaths,
+  audioStartTimes,
+  soundPath,
+  outputPath: mixedVideoPath,
+});
 
     /*
       STEP 5
