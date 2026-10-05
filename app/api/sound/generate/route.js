@@ -15,6 +15,13 @@ const CARTESIA_MODEL =
 const DEFAULT_VOICE_ID =
   "a0e99841-438c-4a64-b679-ae501e7d6091";
 
+const CLOUDINARY_CLOUD_NAME =
+  process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+
+const CLOUDINARY_UPLOAD_PRESET =
+  process.env.NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
+  "bomba_voice";
+
 function buildAudioText(type, prompt) {
   const cleanPrompt =
     typeof prompt === "string"
@@ -31,6 +38,109 @@ function buildAudioText(type, prompt) {
   }
 
   return `${cleanPrompt}.`;
+}
+
+async function uploadSoundToCloudinary(
+  audioBuffer
+) {
+  if (!CLOUDINARY_CLOUD_NAME) {
+    throw new Error(
+      "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not configured."
+    );
+  }
+
+  const formData = new FormData();
+
+  const audioBlob = new Blob(
+    [audioBuffer],
+    {
+      type: "audio/mpeg",
+    }
+  );
+
+  formData.append(
+    "file",
+    audioBlob,
+    `bomba-sound-${Date.now()}.mp3`
+  );
+
+  formData.append(
+    "upload_preset",
+    CLOUDINARY_UPLOAD_PRESET
+  );
+
+  formData.append(
+    "folder",
+    "bomba/sounds"
+  );
+
+  const uploadUrl =
+    `https://api.cloudinary.com/v1_1/` +
+    `${CLOUDINARY_CLOUD_NAME}/video/upload`;
+
+  const uploadResponse =
+    await fetch(uploadUrl, {
+      method: "POST",
+      body: formData,
+      cache: "no-store",
+    });
+
+  const uploadText =
+    await uploadResponse.text();
+
+  let uploadData = {};
+
+  try {
+    uploadData =
+      JSON.parse(uploadText);
+  } catch {
+    uploadData = {};
+  }
+
+  if (!uploadResponse.ok) {
+    console.error(
+      "BOMBA CLOUDINARY SOUND UPLOAD ERROR:",
+      uploadText
+    );
+
+    throw new Error(
+      uploadData?.error?.message ||
+        uploadText ||
+        `Cloudinary returned HTTP ${uploadResponse.status}.`
+    );
+  }
+
+  const secureUrl =
+    uploadData?.secure_url ||
+    uploadData?.url ||
+    null;
+
+  if (
+    !secureUrl ||
+    !/^https?:\/\//i.test(secureUrl)
+  ) {
+    console.error(
+      "BOMBA CLOUDINARY SOUND INVALID URL:",
+      uploadData
+    );
+
+    throw new Error(
+      "Cloudinary did not return a valid HTTP or HTTPS sound URL."
+    );
+  }
+
+  console.log(
+    "BOMBA CLOUDINARY SOUND UPLOADED:",
+    secureUrl
+  );
+
+  return {
+    audioUrl: secureUrl,
+    publicId:
+      uploadData?.public_id || null,
+    resourceType:
+      uploadData?.resource_type || "video",
+  };
 }
 
 export async function POST(request) {
@@ -171,18 +281,26 @@ export async function POST(request) {
       "bytes"
     );
 
-    // Convert the MP3 into a data URL because
-    // the existing Sound Studio expects JSON.
-    const base64Audio =
-      Buffer.from(audioBuffer).toString("base64");
-
-    const audioUrl =
-      `data:audio/mpeg;base64,${base64Audio}`;
+    // Upload the generated MP3 to Cloudinary.
+    // This converts the Cartesia audio into a real
+    // HTTPS URL that the final video mixer can access.
+    const cloudinarySound =
+      await uploadSoundToCloudinary(
+        audioBuffer
+      );
 
     return NextResponse.json(
       {
         status: "completed",
-        audioUrl,
+
+        audioUrl:
+          cloudinarySound.audioUrl,
+
+        publicId:
+          cloudinarySound.publicId,
+
+        resourceType:
+          cloudinarySound.resourceType,
       },
       {
         status: 200,
