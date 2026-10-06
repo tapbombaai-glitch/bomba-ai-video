@@ -132,10 +132,22 @@ function buildPrompt(body) {
     "Detailed realistic environment."
   );
 
-  parts.push(
-    "Consistent character appearance."
-  );
+  
+parts.push(
+  "The uploaded reference image is the main character and must remain the primary character throughout the entire shot."
+);
 
+parts.push(
+  "Preserve the main character's identity, face, facial structure, skin tone, hairstyle, body proportions, clothing, and overall appearance from the uploaded reference image."
+);
+
+parts.push(
+  "Do not replace, redesign, transform, or introduce a different main character."
+);
+
+parts.push(
+  "Keep the main character visually consistent from the first frame to the last frame."
+);
   parts.push(
     "Smooth cinematic camera movement."
   );
