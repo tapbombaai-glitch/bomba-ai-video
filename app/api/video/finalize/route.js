@@ -202,15 +202,26 @@ export async function POST(request) {
     }
 
     if (!ffmpegPath) {
-      return NextResponse.json(
-        {
-          status: "failed",
-          error:
-            "FFmpeg binary is not available.",
-        },
-        { status: 500 }
-      );
-    }
+  return NextResponse.json(
+    {
+      status: "failed",
+      error:
+        "FFmpeg binary is not available.",
+    },
+    { status: 500 }
+  );
+}
+
+console.log(
+  "BOMBA FFMPEG RUNTIME PATH:",
+  ffmpegPath
+);
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+console.log(
+  "BOMBA FFMPEG PATH CONFIGURED"
+);
 
     const body = await request.json();
 
