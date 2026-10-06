@@ -1950,6 +1950,67 @@ const runMasterProduction = async () => {
     production;
 
   /* =============================================
+     06.5 — VISUAL BACKGROUND
+  ============================================= */
+
+  const storyText =
+    [
+      cleanIdea,
+      story.logline,
+      story.beginning,
+      story.middle,
+      story.conflict,
+      story.turningPoint,
+      story.ending,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+  let selectedBackground = null;
+
+  if (storyText.includes("river")) {
+    selectedBackground =
+      getImagesByEnvironment("river")[0] || null;
+  } else if (storyText.includes("forest")) {
+    selectedBackground =
+      getImagesByEnvironment("forest")[0] || null;
+  } else if (
+    storyText.includes("village") ||
+    storyText.includes("market")
+  ) {
+    selectedBackground =
+      getImagesByEnvironment("village")[0] || null;
+  } else if (storyText.includes("sand") || storyText.includes("desert")) {
+    selectedBackground =
+      getImagesByEnvironment("sand")[0] || null;
+  }
+
+  if (!selectedBackground) {
+    selectedBackground =
+      getImagesByMood(
+        mode.toLowerCase()
+      )[0] || null;
+  }
+
+  if (!selectedBackground) {
+    selectedBackground =
+      getAllImages()[0] || null;
+  }
+
+  production =
+    markStage(
+      "scenes",
+      {
+        ...(production?.scenes?.data || {}),
+        background:
+          selectedBackground,
+        createdAt:
+          new Date().toISOString(),
+      }
+    ) ||
+    production;
+  /* =============================================
      02 — STORY / PLAN
   ============================================= */
 
