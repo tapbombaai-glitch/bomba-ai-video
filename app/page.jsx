@@ -11,6 +11,10 @@ import {
   getProduction,
 } from "../lib/bomba/productionStore";
 
+import {
+  getImagesByMood,
+  getImagesByEnvironment,
+} from "../lib/bomba/imageLibrary";
 export default function Home() {
   const [mode, setMode] = useState("Movie");
   const [prompt, setPrompt] = useState("");
