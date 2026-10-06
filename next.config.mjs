@@ -1,15 +1,15 @@
 /** @type {import('next').NextConfig} */
 
 const nextConfig = {
-  serverExternalPackages: [
-    "fluent-ffmpeg",
-    "ffmpeg-static",
-  ],
-
   experimental: {
+    serverComponentsExternalPackages: [
+      "fluent-ffmpeg",
+      "ffmpeg-static",
+    ],
+
     outputFileTracingIncludes: {
       "/api/video/finalize": [
-        "./node_modules/ffmpeg-static/**/*",
+        "./node_modules/ffmpeg-static/ffmpeg",
       ],
     },
   },
