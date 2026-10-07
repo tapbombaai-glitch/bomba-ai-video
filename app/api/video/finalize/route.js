@@ -15,17 +15,11 @@ const CLOUDINARY_CLOUD_NAME =
 const CLOUDINARY_VIDEO_PRESET =
   process.env.NEXT_PUBLIC_CLOUDINARY_VIDEO_PRESET || "";
 
-const CLOUDINARY_UPLOAD_URL =
-  CLOUDINARY_CLOUD_NAME
-    ? `https://api.cloudinary.com/v1_1/${encodeURIComponent(
-        CLOUDINARY_CLOUD_NAME
-      )}/video/upload`
-    : "";
-
-console.log(
-  "BOMBA FFMPEG STATIC PATH:",
-  ffmpegPath
-);
+const CLOUDINARY_UPLOAD_URL = CLOUDINARY_CLOUD_NAME
+  ? `https://api.cloudinary.com/v1_1/${encodeURIComponent(
+      CLOUDINARY_CLOUD_NAME
+    )}/video/upload`
+  : "";
 
 function safeParse(text) {
   try {
@@ -40,12 +34,26 @@ function cloudinaryAudioUrl(publicId) {
     .trim()
     .replace(/^\/+/, "");
 
+  if (!cleanId || !CLOUDINARY_CLOUD_NAME) {
+    return "";
+  }
+
   return `https://res.cloudinary.com/${encodeURIComponent(
     CLOUDINARY_CLOUD_NAME
   )}/video/upload/${cleanId}.mp3`;
 }
 
 async function downloadFile(url, outputPath) {
+  if (
+    typeof url !== "string" ||
+    (!url.startsWith("https://") &&
+      !url.startsWith("http://"))
+  ) {
+    throw new Error(
+      "Media URL must be a valid HTTP or HTTPS URL."
+    );
+  }
+
   const response = await fetch(url, {
     cache: "no-store",
   });
@@ -60,7 +68,16 @@ async function downloadFile(url, outputPath) {
     await response.arrayBuffer()
   );
 
-  await fs.writeFile(outputPath, buffer);
+  if (!buffer.length) {
+    throw new Error(
+      "Downloaded media file is empty."
+    );
+  }
+
+  await fs.writeFile(
+    outputPath,
+    buffer
+  );
 
   return outputPath;
 }
@@ -72,113 +89,199 @@ function runFfmpeg({
   soundPath,
   outputPath,
 }) {
-  return new Promise((resolve, reject) => {
-    const command = ffmpeg(videoPath);
-    if (soundPath) {
-  command.input(soundPath);
-}
-    audioPaths.forEach((audioPath) => {
-      command.input(audioPath);
-    });
+  return new Promise(
+    (resolve, reject) => {
+      try {
+        if (!videoPath) {
+          reject(
+            new Error(
+              "FFmpeg video input is missing."
+            )
+          );
+          return;
+        }
 
-    const inputCount = audioPaths.length;
+        if (!audioPaths?.length) {
+          reject(
+            new Error(
+              "FFmpeg requires at least one voice track."
+            )
+          );
+          return;
+        }
 
-    const filterParts = [];
+        const command =
+          ffmpeg(videoPath);
 
-    /*
-      Prepare each character voice.
+        /*
+          INPUT ORDER
 
-      Example:
+          0 = video
+          1 = background sound, if present
+          2+ = character voices
+        */
 
-      Voice A starts at 0 sec
-      Voice B starts at 4.5 sec
-      Voice C starts at 8 sec
-    */
+        if (soundPath) {
+          command.input(soundPath);
+        }
 
-    audioPaths.forEach((_, index) => {
-      const delayMs = Math.max(
-        0,
-        Math.round(
-          Number(audioStartTimes[index] || 0) * 1000
-        )
-      );
-
-      filterParts.push(
-  `[${index + (soundPath ? 2 : 1)}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
-);
-    });
-
-    const mixInputs = audioPaths
-      .map((_, index) => `[voice${index}]`)
-      .join("");
-
-    filterParts.push(
-  `${mixInputs}amix=inputs=${inputCount}:duration=longest:dropout_transition=0[mixedVoice]`
-);
-
-if (soundPath) {
-  filterParts.push(
-    `[1:a]volume=0.22[backgroundSound]`
-  );
-
-  filterParts.push(
-    `[mixedVoice][backgroundSound]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[mixedAudio]`
-  );
-} else {
-  filterParts.push(
-    `[mixedVoice]anull[mixedAudio]`
-  );
-}
-
-command
-  .complexFilter(filterParts)
-  .outputOptions([
-    "-map 0:v:0",
-    "-map [mixedAudio]",
-    "-c:v copy",
-    "-c:a aac",
-    "-b:a 192k",
-    "-shortest",
-    "-movflags +faststart",
-  ])
-      .on("start", (commandLine) => {
-        console.log(
-          "BOMBA FFMPEG START:",
-          commandLine
+        audioPaths.forEach(
+          (audioPath) => {
+            command.input(audioPath);
+          }
         );
-      })
-      .on("progress", (progress) => {
-        if (progress?.percent) {
-          console.log(
-            `BOMBA FFMPEG PROGRESS: ${progress.percent.toFixed(
-              1
-            )}%`
+
+        const filterParts = [];
+
+        /*
+          Prepare each character voice
+          with its individual start time.
+        */
+
+        audioPaths.forEach(
+          (_, index) => {
+            const delaySeconds =
+              Number(
+                audioStartTimes?.[
+                  index
+                ] ?? 0
+              );
+
+            const safeDelay =
+              Number.isFinite(
+                delaySeconds
+              ) &&
+              delaySeconds >= 0
+                ? delaySeconds
+                : 0;
+
+            const delayMs =
+              Math.round(
+                safeDelay * 1000
+              );
+
+            const inputIndex =
+              index +
+              (soundPath ? 2 : 1);
+
+            filterParts.push(
+              `[${inputIndex}:a]adelay=${delayMs}|${delayMs}[voice${index}]`
+            );
+          }
+        );
+
+        /*
+          Mix all character voices.
+        */
+
+        const mixInputs =
+          audioPaths
+            .map(
+              (_, index) =>
+                `[voice${index}]`
+            )
+            .join("");
+
+        filterParts.push(
+          `${mixInputs}amix=inputs=${audioPaths.length}:duration=longest:dropout_transition=0[mixedVoice]`
+        );
+
+        /*
+          Add background sound when available.
+        */
+
+        if (soundPath) {
+          filterParts.push(
+            `[1:a]volume=0.22[backgroundSound]`
+          );
+
+          filterParts.push(
+            `[mixedVoice][backgroundSound]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[mixedAudio]`
+          );
+        } else {
+          filterParts.push(
+            `[mixedVoice]anull[mixedAudio]`
           );
         }
-      })
-      .on("end", () => {
-        console.log(
-          "BOMBA FFMPEG COMPLETE"
-        );
 
-        resolve();
-      })
-      .on("error", (error) => {
-        console.error(
-          "BOMBA FFMPEG ERROR:",
-          error
-        );
+        command
+          .complexFilter(
+            filterParts
+          )
+          .outputOptions([
+            "-map 0:v:0",
+            "-map [mixedAudio]",
+            "-c:v copy",
+            "-c:a aac",
+            "-b:a 192k",
+            "-shortest",
+            "-movflags +faststart",
+          ])
+          .on(
+            "start",
+            (commandLine) => {
+              console.log(
+                "BOMBA FFMPEG START:",
+                commandLine
+              );
+            }
+          )
+          .on(
+            "progress",
+            (progress) => {
+              if (
+                typeof progress?.percent ===
+                "number"
+              ) {
+                console.log(
+                  `BOMBA FFMPEG PROGRESS: ${progress.percent.toFixed(
+                    1
+                  )}%`
+                );
+              }
+            }
+          )
+          .on(
+            "end",
+            () => {
+              console.log(
+                "BOMBA FFMPEG COMPLETE"
+              );
 
+              resolve();
+            }
+          )
+          .on(
+            "error",
+            (error) => {
+              console.error(
+                "BOMBA FFMPEG ERROR:",
+                error
+              );
+
+              reject(error);
+            }
+          )
+          .save(outputPath);
+      } catch (error) {
         reject(error);
-      })
-      .save(outputPath);
-  });
+      }
+    }
+  );
 }
 
-export async function POST(request) {
+export async function POST(
+  request
+) {
   let workDir = "";
 
   try {
+    /*
+      ============================================
+      01 — CONFIGURATION CHECK
+      ============================================
+    */
+
     if (!CLOUDINARY_CLOUD_NAME) {
       return NextResponse.json(
         {
@@ -202,100 +305,128 @@ export async function POST(request) {
     }
 
     if (!ffmpegPath) {
-  return NextResponse.json(
-    {
-      status: "failed",
-      error:
-        "FFmpeg binary is not available.",
-    },
-    { status: 500 }
-  );
-}
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "FFmpeg binary is not available.",
+        },
+        { status: 500 }
+      );
+    }
 
-console.log(
-  "BOMBA FFMPEG RUNTIME PATH:",
-  ffmpegPath
-);
+    console.log(
+      "BOMBA FFMPEG STATIC PATH:",
+      ffmpegPath
+    );
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+    ffmpeg.setFfmpegPath(
+      ffmpegPath
+    );
 
-console.log(
-  "BOMBA FFMPEG PATH CONFIGURED"
-);
+    /*
+      ============================================
+      02 — READ REQUEST
+      ============================================
+    */
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
     const videoUrl =
-      typeof body?.videoUrl === "string"
+      typeof body?.videoUrl ===
+      "string"
         ? body.videoUrl.trim()
         : "";
 
     /*
-      NEW MULTI-VOICE FORMAT
-
-      voiceTracks: [
-        {
-          publicId: "voice/daniel",
-          startTime: 0
-        },
-        {
-          publicId: "voice/sarah",
-          startTime: 4.5
-        }
-      ]
+      ============================================
+      03 — VOICE TRACKS
+      ============================================
     */
 
-    const incomingVoiceTracks = Array.isArray(
-      body?.voiceTracks
-    )
-      ? body.voiceTracks
-      : [];
-
-    /*
-      BACKWARD COMPATIBILITY
-
-      The old frontend can still send:
-
-      voicePublicId: "voice/daniel"
-    */
+    const incomingVoiceTracks =
+      Array.isArray(
+        body?.voiceTracks
+      )
+        ? body.voiceTracks
+        : [];
 
     const legacyVoicePublicId =
-      typeof body?.voicePublicId === "string"
+      typeof body?.voicePublicId ===
+      "string"
         ? body.voicePublicId.trim()
         : "";
 
     const voiceTracks =
-      incomingVoiceTracks.length > 0
+      incomingVoiceTracks.length >
+      0
         ? incomingVoiceTracks
             .map((track) => ({
               publicId:
-                typeof track?.publicId === "string"
+                typeof track?.publicId ===
+                "string"
                   ? track.publicId.trim()
                   : "",
+
               startTime:
                 Number.isFinite(
-                  Number(track?.startTime)
+                  Number(
+                    track?.startTime
+                  )
                 )
-                  ? Number(track.startTime)
+                  ? Math.max(
+                      0,
+                      Number(
+                        track.startTime
+                      )
+                    )
                   : 0,
             }))
             .filter(
-              (track) => track.publicId
+              (track) =>
+                track.publicId
             )
         : legacyVoicePublicId
         ? [
             {
-              publicId: legacyVoicePublicId,
+              publicId:
+                legacyVoicePublicId,
               startTime: 0,
             },
           ]
         : [];
 
+    /*
+      ============================================
+      04 — VALIDATE REQUEST
+      ============================================
+    */
+
     if (!videoUrl) {
       return NextResponse.json(
         {
           status: "failed",
-          error: "videoUrl is required.",
+          error:
+            "videoUrl is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !videoUrl.startsWith(
+        "https://"
+      ) &&
+      !videoUrl.startsWith(
+        "http://"
+      )
+    ) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "The supplied video URL must be a valid HTTP or HTTPS URL.",
         },
         { status: 400 }
       );
@@ -312,19 +443,11 @@ console.log(
       );
     }
 
-    if (
-      !videoUrl.startsWith("https://") &&
-      !videoUrl.startsWith("http://")
-    ) {
-      return NextResponse.json(
-        {
-          status: "failed",
-          error:
-            "The supplied video URL must be a valid HTTP or HTTPS URL.",
-        },
-        { status: 400 }
-      );
-    }
+    /*
+      ============================================
+      05 — LOG FINALIZATION START
+      ============================================
+    */
 
     console.log(
       "======================================"
@@ -332,11 +455,6 @@ console.log(
 
     console.log(
       "BOMBA MULTI-VOICE FINAL VIDEO STARTING"
-    );
-
-    console.log(
-      "ETERNAL VIDEO:",
-      videoUrl
     );
 
     console.log(
@@ -354,8 +472,9 @@ console.log(
     );
 
     /*
-      STEP 1
-      Create temporary working directory.
+      ============================================
+      06 — CREATE TEMP DIRECTORY
+      ============================================
     */
 
     workDir = path.join(
@@ -365,18 +484,23 @@ console.log(
         .toString("hex")}`
     );
 
-    await fs.mkdir(workDir, {
-      recursive: true,
-    });
-
-    const videoInputPath = path.join(
+    await fs.mkdir(
       workDir,
-      "input-video.mp4"
+      {
+        recursive: true,
+      }
     );
 
+    const videoInputPath =
+      path.join(
+        workDir,
+        "input-video.mp4"
+      );
+
     /*
-      STEP 2
-      Download Eternal AI video.
+      ============================================
+      07 — DOWNLOAD GENERATED VIDEO
+      ============================================
     */
 
     await downloadFile(
@@ -390,8 +514,9 @@ console.log(
     );
 
     /*
-      STEP 3
-      Download every character voice.
+      ============================================
+      08 — DOWNLOAD CHARACTER VOICES
+      ============================================
     */
 
     const audioPaths = [];
@@ -410,13 +535,22 @@ console.log(
           track.publicId
         );
 
-      const audioPath = path.join(
-        workDir,
-        `voice-${index}.mp3`
-      );
+      if (!audioUrl) {
+        throw new Error(
+          `Unable to create Cloudinary audio URL for voice track ${index + 1}.`
+        );
+      }
+
+      const audioPath =
+        path.join(
+          workDir,
+          `voice-${index}.mp3`
+        );
 
       console.log(
-        `BOMBA DOWNLOADING VOICE ${index + 1}:`,
+        `BOMBA DOWNLOADING VOICE ${
+          index + 1
+        }:`,
         audioUrl
       );
 
@@ -425,54 +559,68 @@ console.log(
         audioPath
       );
 
-      audioPaths.push(audioPath);
+      audioPaths.push(
+        audioPath
+      );
 
       audioStartTimes.push(
         track.startTime
       );
     }
 
-let soundPath = "";
-
-const soundUrl =
-  typeof body?.sound?.audioUrl === "string"
-    ? body.sound.audioUrl.trim()
-    : "";
-
-if (soundUrl) {
-  if (
-    !soundUrl.startsWith("https://") &&
-    !soundUrl.startsWith("http://")
-  ) {
-    throw new Error(
-      "The supplied background sound URL must be a valid HTTP or HTTPS URL."
-    );
-  }
-
-  soundPath = path.join(
-    workDir,
-    "background-sound.mp3"
-  );
-
-  console.log(
-    "BOMBA DOWNLOADING BACKGROUND SOUND:",
-    soundUrl
-  );
-
-  await downloadFile(
-    soundUrl,
-    soundPath
-  );
-
-  console.log(
-    "BOMBA BACKGROUND SOUND DOWNLOADED:",
-    soundPath
-  );
-}
     /*
-      STEP 4
-      Mix all character voices with
-      their individual start times.
+      ============================================
+      09 — OPTIONAL BACKGROUND SOUND
+      ============================================
+    */
+
+    let soundPath = "";
+
+    const soundUrl =
+      typeof body?.sound
+        ?.audioUrl === "string"
+        ? body.sound.audioUrl.trim()
+        : "";
+
+    if (soundUrl) {
+      if (
+        !soundUrl.startsWith(
+          "https://"
+        ) &&
+        !soundUrl.startsWith(
+          "http://"
+        )
+      ) {
+        throw new Error(
+          "The supplied background sound URL must be a valid HTTP or HTTPS URL."
+        );
+      }
+
+      soundPath = path.join(
+        workDir,
+        "background-sound.mp3"
+      );
+
+      console.log(
+        "BOMBA DOWNLOADING BACKGROUND SOUND:",
+        soundUrl
+      );
+
+      await downloadFile(
+        soundUrl,
+        soundPath
+      );
+
+      console.log(
+        "BOMBA BACKGROUND SOUND DOWNLOADED:",
+        soundPath
+      );
+    }
+
+    /*
+      ============================================
+      10 — MIX VIDEO + VOICES + SOUND
+      ============================================
     */
 
     const mixedVideoPath =
@@ -482,16 +630,48 @@ if (soundUrl) {
       );
 
     await runFfmpeg({
-  videoPath: videoInputPath,
-  audioPaths,
-  audioStartTimes,
-  soundPath,
-  outputPath: mixedVideoPath,
-});
+      videoPath:
+        videoInputPath,
+
+      audioPaths,
+
+      audioStartTimes,
+
+      soundPath,
+
+      outputPath:
+        mixedVideoPath,
+    });
 
     /*
-      STEP 5
-      Upload finished video to Cloudinary.
+      ============================================
+      11 — VERIFY OUTPUT
+      ============================================
+    */
+
+    const outputStats =
+      await fs.stat(
+        mixedVideoPath
+      );
+
+    if (
+      !outputStats.isFile() ||
+      outputStats.size === 0
+    ) {
+      throw new Error(
+        "FFmpeg completed but produced an empty final video."
+      );
+    }
+
+    console.log(
+      "BOMBA MIXED VIDEO SIZE:",
+      outputStats.size
+    );
+
+    /*
+      ============================================
+      12 — UPLOAD FINAL VIDEO
+      ============================================
     */
 
     const uploadFormData =
@@ -529,14 +709,18 @@ if (soundUrl) {
       await uploadResponse.text();
 
     const uploadData =
-      safeParse(uploadText);
+      safeParse(
+        uploadText
+      );
 
     console.log(
       "BOMBA FINAL CLOUDINARY UPLOAD STATUS:",
       uploadResponse.status
     );
 
-    if (!uploadResponse.ok) {
+    if (
+      !uploadResponse.ok
+    ) {
       console.error(
         "BOMBA FINAL CLOUDINARY UPLOAD ERROR:",
         uploadText.slice(
@@ -549,19 +733,28 @@ if (soundUrl) {
         {
           status: "failed",
           error:
-            uploadData?.error?.message ||
+            uploadData?.error
+              ?.message ||
             uploadData?.error ||
             `Cloudinary final video upload failed with HTTP ${uploadResponse.status}.`,
         },
         {
           status:
-            uploadResponse.status >= 400 &&
-            uploadResponse.status < 500
+            uploadResponse.status >=
+              400 &&
+            uploadResponse.status <
+              500
               ? uploadResponse.status
               : 502,
         }
       );
     }
+
+    /*
+      ============================================
+      13 — VERIFY CLOUDINARY RESPONSE
+      ============================================
+    */
 
     const finalVideoPublicId =
       uploadData?.public_id;
@@ -590,21 +783,33 @@ if (soundUrl) {
     );
 
     console.log(
-      "BOMBA FINAL VIDEO URL:",
-      finalVideoUrl
+      "BOMBA FINAL VIDEO READY"
     );
+
+    /*
+      ============================================
+      14 — RETURN FINAL VIDEO
+      ============================================
+    */
 
     return NextResponse.json(
       {
         status: "completed",
-        videoUrl: finalVideoUrl,
-        finalVideoUrl,
+
+        videoUrl:
+          finalVideoUrl,
+
+        finalVideoUrl:
+          finalVideoUrl,
+
         cloudinaryVideoPublicId:
           finalVideoPublicId,
+
         voiceTracks,
       },
       {
         status: 200,
+
         headers: {
           "Cache-Control":
             "no-store",
@@ -628,7 +833,9 @@ if (soundUrl) {
     );
   } finally {
     /*
-      Always clean temporary files.
+      ============================================
+      15 — CLEAN TEMP FILES
+      ============================================
     */
 
     if (workDir) {
@@ -639,6 +846,10 @@ if (soundUrl) {
             recursive: true,
             force: true,
           }
+        );
+
+        console.log(
+          "BOMBA TEMP DIRECTORY CLEANED"
         );
       } catch (cleanupError) {
         console.error(
