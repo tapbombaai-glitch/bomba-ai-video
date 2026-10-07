@@ -1,7 +1,43 @@
+// ============================================
+// BOMBA AI VIDEO STUDIO
+// FILE: app/api/sound/generate/route.js
+//
+// PURPOSE:
+// Generate background sound/music with Cartesia
+// Upload generated MP3 to Cloudinary
+// Return a public HTTPS audio URL
+//
+// PIPELINE:
+//
+// BOMBA
+//   ↓
+// /api/sound/generate
+//   ↓
+// Cartesia
+//   ↓
+// MP3
+//   ↓
+// Cloudinary
+//   ↓
+// audioUrl + publicId
+//   ↓
+// /api/video/finalize
+//
+// IMPORTANT:
+// - No FFmpeg here
+// - No video generation here
+// - No Eternal AI here
+// - API keys remain server-side
+// ============================================
+
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+// ============================================
+// ENVIRONMENT
+// ============================================
 
 const CARTESIA_API_KEY =
   process.env.CARTESIA_API_KEY;
@@ -22,6 +58,10 @@ const CLOUDINARY_UPLOAD_PRESET =
   process.env.NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET ||
   "bomba_voice";
 
+// ============================================
+// BUILD SOUND TEXT
+// ============================================
+
 function buildAudioText(type, prompt) {
   const cleanPrompt =
     typeof prompt === "string"
@@ -29,7 +69,8 @@ function buildAudioText(type, prompt) {
       : "";
 
   const soundType =
-    typeof type === "string"
+    typeof type === "string" &&
+    type.trim()
       ? type.trim()
       : "Background Music";
 
@@ -40,12 +81,28 @@ function buildAudioText(type, prompt) {
   return `${cleanPrompt}.`;
 }
 
+// ============================================
+// UPLOAD SOUND TO CLOUDINARY
+// ============================================
+
 async function uploadSoundToCloudinary(
   audioBuffer
 ) {
   if (!CLOUDINARY_CLOUD_NAME) {
     throw new Error(
       "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not configured."
+    );
+  }
+
+  if (!CLOUDINARY_UPLOAD_PRESET) {
+    throw new Error(
+      "NEXT_PUBLIC_CLOUDINARY_VOICE_PRESET is not configured."
+    );
+  }
+
+  if (!audioBuffer || !audioBuffer.byteLength) {
+    throw new Error(
+      "Cannot upload an empty sound file."
     );
   }
 
@@ -99,13 +156,14 @@ async function uploadSoundToCloudinary(
 
   if (!uploadResponse.ok) {
     console.error(
-      "BOMBA CLOUDINARY SOUND UPLOAD ERROR:",
-      uploadText
+      "BOMBA CLOUDINARY SOUND UPLOAD FAILED:",
+      {
+        status: uploadResponse.status,
+      }
     );
 
     throw new Error(
       uploadData?.error?.message ||
-        uploadText ||
         `Cloudinary returned HTTP ${uploadResponse.status}.`
     );
   }
@@ -115,36 +173,54 @@ async function uploadSoundToCloudinary(
     uploadData?.url ||
     null;
 
+  const publicId =
+    uploadData?.public_id ||
+    null;
+
+  const resourceType =
+    uploadData?.resource_type ||
+    "video";
+
   if (
     !secureUrl ||
     !/^https?:\/\//i.test(secureUrl)
   ) {
-    console.error(
-      "BOMBA CLOUDINARY SOUND INVALID URL:",
-      uploadData
-    );
-
     throw new Error(
-      "Cloudinary did not return a valid HTTP or HTTPS sound URL."
+      "Cloudinary did not return a valid HTTPS sound URL."
+    );
+  }
+
+  if (!publicId) {
+    throw new Error(
+      "Cloudinary did not return a sound public_id."
     );
   }
 
   console.log(
-    "BOMBA CLOUDINARY SOUND UPLOADED:",
-    secureUrl
+    "BOMBA CLOUDINARY SOUND UPLOAD COMPLETE:",
+    {
+      resourceType,
+      hasPublicId: true,
+    }
   );
 
   return {
     audioUrl: secureUrl,
-    publicId:
-      uploadData?.public_id || null,
-    resourceType:
-      uploadData?.resource_type || "video",
+    publicId,
+    resourceType,
   };
 }
 
+// ============================================
+// POST
+// ============================================
+
 export async function POST(request) {
   try {
+    // ========================================
+    // CHECK CARTESIA KEY
+    // ========================================
+
     if (!CARTESIA_API_KEY) {
       return NextResponse.json(
         {
@@ -152,15 +228,36 @@ export async function POST(request) {
           error:
             "CARTESIA_API_KEY is not configured in Vercel.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    const body = await request.json();
+    // ========================================
+    // READ REQUEST
+    // ========================================
+
+    let body;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error: "Invalid JSON request body.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const type =
-      typeof body?.type === "string"
-        ? body.type
+      typeof body?.type === "string" &&
+      body.type.trim()
+        ? body.type.trim()
         : "Background Music";
 
     const prompt =
@@ -175,9 +272,29 @@ export async function POST(request) {
           error:
             "Please describe the sound you want.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
+
+    // Prevent unnecessarily huge sound prompts.
+    if (prompt.length > 2000) {
+      return NextResponse.json(
+        {
+          status: "failed",
+          error:
+            "Sound prompt is too long. Please keep it under 2000 characters.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ========================================
+    // VOICE
+    // ========================================
 
     const voiceId =
       typeof body?.voiceId === "string" &&
@@ -185,71 +302,112 @@ export async function POST(request) {
         ? body.voiceId.trim()
         : DEFAULT_VOICE_ID;
 
+    // ========================================
+    // FINAL CARTESIA TEXT
+    // ========================================
+
     const finalText =
-      buildAudioText(type, prompt);
+      buildAudioText(
+        type,
+        prompt
+      );
 
     console.log(
       "BOMBA CARTESIA SOUND STARTING:",
       {
         type,
         model: CARTESIA_MODEL,
-        voiceId,
         textLength: finalText.length,
       }
     );
 
-    const response = await fetch(
-      CARTESIA_URL,
-      {
-        method: "POST",
-        headers: {
-          "X-API-Key": CARTESIA_API_KEY,
-          "Cartesia-Version": "2025-04-16",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model_id: CARTESIA_MODEL,
+    // ========================================
+    // CARTESIA REQUEST
+    // ========================================
 
-          transcript: finalText,
+    const response =
+      await fetch(
+        CARTESIA_URL,
+        {
+          method: "POST",
 
-          voice: {
-            mode: "id",
-            id: voiceId,
+          headers: {
+            "X-API-Key":
+              CARTESIA_API_KEY,
+
+            "Cartesia-Version":
+              "2025-04-16",
+
+            "Content-Type":
+              "application/json",
           },
 
-          language: "en",
+          body: JSON.stringify({
+            model_id:
+              CARTESIA_MODEL,
 
-          output_format: {
-            container: "mp3",
-            encoding: "mp3",
-            sample_rate: 44100,
-          },
-        }),
+            transcript:
+              finalText,
 
-        cache: "no-store",
-      }
-    );
+            voice: {
+              mode: "id",
+              id: voiceId,
+            },
+
+            language:
+              "en",
+
+            output_format: {
+              container: "mp3",
+              encoding: "mp3",
+              sample_rate: 44100,
+            },
+          }),
+
+          cache: "no-store",
+        }
+      );
 
     console.log(
       "BOMBA CARTESIA SOUND STATUS:",
       response.status
     );
 
+    // ========================================
+    // CARTESIA ERROR
+    // ========================================
+
     if (!response.ok) {
       const errorText =
         await response.text();
 
       console.error(
-        "BOMBA CARTESIA SOUND ERROR:",
-        errorText
+        "BOMBA CARTESIA SOUND FAILED:",
+        {
+          status: response.status,
+        }
       );
+
+      let readableError =
+        `Cartesia returned HTTP ${response.status}.`;
+
+      try {
+        const errorData =
+          JSON.parse(errorText);
+
+        readableError =
+          errorData?.message ||
+          errorData?.error ||
+          errorData?.detail ||
+          readableError;
+      } catch {
+        // Keep safe generic message.
+      }
 
       return NextResponse.json(
         {
           status: "failed",
-          error:
-            errorText ||
-            `Cartesia returned HTTP ${response.status}.`,
+          error: readableError,
         },
         {
           status:
@@ -261,33 +419,49 @@ export async function POST(request) {
       );
     }
 
+    // ========================================
+    // READ AUDIO
+    // ========================================
+
     const audioBuffer =
       await response.arrayBuffer();
 
-    if (!audioBuffer.byteLength) {
+    if (
+      !audioBuffer ||
+      !audioBuffer.byteLength
+    ) {
       return NextResponse.json(
         {
           status: "failed",
           error:
             "Cartesia returned an empty audio file.",
         },
-        { status: 502 }
+        {
+          status: 502,
+        }
       );
     }
 
     console.log(
       "BOMBA CARTESIA SOUND COMPLETED:",
-      audioBuffer.byteLength,
-      "bytes"
+      {
+        bytes:
+          audioBuffer.byteLength,
+      }
     );
 
-    // Upload the generated MP3 to Cloudinary.
-    // This converts the Cartesia audio into a real
-    // HTTPS URL that the final video mixer can access.
+    // ========================================
+    // CLOUDINARY
+    // ========================================
+
     const cloudinarySound =
       await uploadSoundToCloudinary(
         audioBuffer
       );
+
+    // ========================================
+    // FINAL RESPONSE
+    // ========================================
 
     return NextResponse.json(
       {
@@ -301,18 +475,30 @@ export async function POST(request) {
 
         resourceType:
           cloudinarySound.resourceType,
+
+        type,
+
+        model:
+          CARTESIA_MODEL,
       },
       {
         status: 200,
+
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control":
+            "no-store",
         },
       }
     );
   } catch (error) {
+    // ========================================
+    // SERVER ERROR
+    // ========================================
+
     console.error(
       "BOMBA CARTESIA SOUND SERVER ERROR:",
-      error
+      error?.message ||
+        "Unknown error"
     );
 
     return NextResponse.json(
@@ -322,7 +508,9 @@ export async function POST(request) {
           error?.message ||
           "Unexpected error while generating sound.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
