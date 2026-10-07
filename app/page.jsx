@@ -2605,12 +2605,34 @@ the complete production plan above.
             🔑 API KEY
           </button>
 
-          <button
-            type="button"
-            className="profileButton"
-          >
-            TB
-          </button>
+         <a
+  href="https://www.youtube.com/@TapBumberAI"
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: "10px",
+    border: "1px solid #333333",
+    background: "#111111",
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: "13px",
+    textDecoration: "none",
+    cursor: "pointer",
+  }}
+>
+  ▶️ YouTube
+</a>
+
+<button
+  type="button"
+  className="profileButton"
+>
+  TB
+</button>
         </div>
       </header>
 
