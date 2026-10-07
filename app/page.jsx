@@ -1519,19 +1519,25 @@ export default function Home() {
             );
 
           const finalVideoUrl =
-            await finalizeVideoWithVoice(
-              generatedVideoUrl
-            );
+  await finalizeVideoWithVoice(
+    generatedVideoUrl
+  );
 
-          URL.revokeObjectURL(
-            generatedVideoUrl
-          );
+// Only revoke the temporary blob URL
+// if the finalizer created a different URL.
+if (
+  finalVideoUrl !==
+  generatedVideoUrl
+) {
+  URL.revokeObjectURL(
+    generatedVideoUrl
+  );
+}
 
-          completeFinalStages(
-            finalVideoUrl,
-            null
-          );
-
+completeFinalStages(
+  finalVideoUrl,
+  null
+);
           setVideoUrl(
             finalVideoUrl
           );
