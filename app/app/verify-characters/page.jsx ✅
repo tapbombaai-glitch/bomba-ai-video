@@ -1,0 +1,206 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createMasterCharacters } from "../../lib/bomba/characterBuilder";
+
+export default function VerifyCharactersPage() {
+  const [results, setResults] = useState([]);
+  const [characters, setCharacters] = useState([]);
+  const [passed, setPassed] = useState(false);
+
+  useEffect(() => {
+    const tests = [];
+    const addTest = (name, condition) => {
+      tests.push({
+        name,
+        passed: Boolean(condition),
+      });
+    };
+
+    try {
+      const created = createMasterCharacters();
+
+      setCharacters(created);
+
+      addTest(
+        "Characters are created",
+        Array.isArray(created)
+      );
+
+      addTest(
+        "Exactly 3 characters exist",
+        created.length === 3
+      );
+
+      const requiredFields = [
+        "id",
+        "name",
+        "role",
+        "gender",
+        "voiceId",
+        "voiceName",
+        "voiceGender",
+        "voiceStatus",
+      ];
+
+      created.forEach((character, index) => {
+        requiredFields.forEach((field) => {
+          addTest(
+            `Character ${index + 1} has ${field}`,
+            character[field] !== undefined &&
+              character[field] !== null &&
+              character[field] !== ""
+          );
+        });
+      });
+
+      const characterIds = created.map((character) => character.id);
+      const voiceIds = created.map((character) => character.voiceId);
+
+      addTest(
+        "Character IDs are unique",
+        new Set(characterIds).size === characterIds.length
+      );
+
+      addTest(
+        "Voice IDs are unique",
+        new Set(voiceIds).size === voiceIds.length
+      );
+
+      addTest(
+        "Main Character exists",
+        characterIds.includes("character-main")
+      );
+
+      addTest(
+        "Friend exists",
+        characterIds.includes("character-friend")
+      );
+
+      addTest(
+        "Rival exists",
+        characterIds.includes("character-rival")
+      );
+
+      const main = created.find(
+        (character) => character.id === "character-main"
+      );
+
+      const friend = created.find(
+        (character) => character.id === "character-friend"
+      );
+
+      const rival = created.find(
+        (character) => character.id === "character-rival"
+      );
+
+      addTest(
+        "Main Character uses ada_pcm",
+        main?.voiceId === "ada_pcm"
+      );
+
+      addTest(
+        "Friend uses blessing_pcm",
+        friend?.voiceId === "blessing_pcm"
+      );
+
+      addTest(
+        "Rival uses ifeanyi_ig",
+        rival?.voiceId === "ifeanyi_ig"
+      );
+
+      addTest(
+        "All character records are valid objects",
+        created.every(
+          (character) =>
+            character &&
+            typeof character === "object" &&
+            !Array.isArray(character)
+        )
+      );
+
+      const allPassed = tests.every((test) => test.passed);
+
+      setResults(tests);
+      setPassed(allPassed);
+    } catch (error) {
+      setResults([
+        {
+          name: `Character system error: ${error.message}`,
+          passed: false,
+        },
+      ]);
+
+      setPassed(false);
+    }
+  }, []);
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: "40px 20px",
+        background: "#111",
+        color: "#fff",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <h1>BOMBA AI — Character Verification</h1>
+
+      <div
+        style={{
+          marginTop: "20px",
+          padding: "20px",
+          borderRadius: "12px",
+          background: passed ? "#123d20" : "#3d1212",
+          border: `2px solid ${passed ? "#2ecc71" : "#e74c3c"}`,
+        }}
+      >
+        <h2>
+          {passed
+            ? "🔒 ALL CHARACTER TESTS PASSED"
+            : "🛑 CHARACTER CHECK FAILED"}
+        </h2>
+
+        <p>
+          Read-only test. No video generation. No voice generation. No
+          Cloudinary. No Eternal AI. No credits.
+        </p>
+      </div>
+
+      <section style={{ marginTop: "30px" }}>
+        <h2>Character Records</h2>
+
+        {characters.map((character) => (
+          <pre
+            key={character.id}
+            style={{
+              background: "#1d1d1d",
+              padding: "15px",
+              borderRadius: "8px",
+              overflowX: "auto",
+            }}
+          >
+            {JSON.stringify(character, null, 2)}
+          </pre>
+        ))}
+      </section>
+
+      <section style={{ marginTop: "30px" }}>
+        <h2>Test Results</h2>
+
+        {results.map((test, index) => (
+          <div
+            key={index}
+            style={{
+              padding: "8px 0",
+              color: test.passed ? "#2ecc71" : "#ff5555",
+            }}
+          >
+            {test.passed ? "✅" : "❌"} {test.name}
+          </div>
+        ))}
+      </section>
+    </main>
+  );
+}
